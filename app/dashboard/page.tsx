@@ -363,11 +363,7 @@ export default function DashboardPage() {
   const [periods, setPeriods] = useState<{ year: number; month: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-
-  // 구글 시트 실시간 모드
-  const [liveMode, setLiveMode] = useState(false)
-  const [liveRows, setLiveRows] = useState<Transaction[]>([])
-  const [liveLoading, setLiveLoading] = useState(false)
+  const [syncLoading, setSyncLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [dark, setDark] = useState(false)
 
@@ -471,7 +467,7 @@ export default function DashboardPage() {
     })
   }, [filterWeek, filterDay, selCats, search])
 
-  const currentRows = useMemo(() => applyFilters(liveMode ? liveRows : monthData), [liveMode, liveRows, monthData, applyFilters])
+  const currentRows = useMemo(() => applyFilters(monthData), [monthData, applyFilters])
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
   const prevRows = useMemo(() => prevData, [prevData])
@@ -554,57 +550,54 @@ export default function DashboardPage() {
     await fetchMonthData(year, month); setSelectedIds(new Set()); setBulkCat('')
   }
 
-  // 구글 시트 실시간 데이터 불러오기
-  const fetchLiveData = async () => {
-    setLiveLoading(true)
+  // 시트 동기화: 구글 시트 읽어서 DB에 임시 저장 (is_closed=false)
+  const handleSyncSheets = async () => {
+    setSyncLoading(true)
     try {
-      const res = await fetch('/api/sheets')
-      const json = await res.json()
-      if (json.error) throw new Error(json.error)
-      setLiveRows(json.transactions || [])
-      setLiveMode(true)
-    } catch (err) {
-      alert('시트 데이터 로드 실패: ' + String(err))
-    } finally {
-      setLiveLoading(false)
-    }
-  }
-
-  // 이번달 마감: 구글 시트 → Supabase 저장
-  const handleCloseMonth = async () => {
-    if (!confirm('구글 시트의 현재 데이터를 마감 처리합니다.\n시트 데이터를 DB에 저장하고 잠금 처리됩니다.\n계속하시겠습니까?')) return
-
-    setLiveLoading(true)
-    try {
-      // 시트에서 실시간 데이터 가져오기
       const res = await fetch('/api/sheets')
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       const rows: Transaction[] = json.transactions || []
       if (!rows.length) { alert('구글 시트에 데이터가 없습니다.'); return }
 
-      const closeYear = rows[0].year
-      const closeMonth = rows[0].month
+      const syncYear = rows[0].year
+      const syncMonth = rows[0].month
 
-      // 기존 해당 월 데이터 삭제 후 재저장
-      await supabase.from('transactions').delete().eq('year', closeYear).eq('month', closeMonth)
-      const closeData = rows.map(t => ({ ...t, is_closed: true, closed_at: new Date().toISOString() }))
+      // 기존 임시 데이터 삭제 후 새 임시 데이터 저장
+      await supabase.from('transactions')
+        .delete().eq('year', syncYear).eq('month', syncMonth).eq('is_closed', false)
 
+      const tempData = rows.map(t => ({ ...t, is_closed: false }))
       const BATCH = 100
-      for (let i = 0; i < closeData.length; i += BATCH) {
-        await supabase.from('transactions').insert(closeData.slice(i, i + BATCH))
+      for (let i = 0; i < tempData.length; i += BATCH) {
+        await supabase.from('transactions').insert(tempData.slice(i, i + BATCH))
       }
 
       await fetchPeriods()
-      setYear(closeYear)
-      setMonth(closeMonth)
-      setLiveMode(false)
-      alert(`✅ ${closeYear}년 ${closeMonth}월 마감 완료! (${rows.length}건 저장)`)
+      setYear(syncYear)
+      setMonth(syncMonth)
+      await fetchMonthData(syncYear, syncMonth)
+      alert(`✅ ${syncYear}년 ${syncMonth}월 동기화 완료! (${rows.length}건 임시 저장)`)
     } catch (err) {
-      alert('마감 실패: ' + String(err))
+      alert('동기화 실패: ' + String(err))
     } finally {
-      setLiveLoading(false)
+      setSyncLoading(false)
     }
+  }
+
+  // 월 마감: 임시(is_closed=false) → 확정(is_closed=true)
+  const handleCloseMonth = async () => {
+    const tempCount = monthData.filter(t => !t.is_closed).length
+    if (tempCount === 0) { alert('마감할 임시 데이터가 없습니다.\n먼저 시트 동기화를 해주세요.'); return }
+    if (!confirm(`${year}년 ${month}월 데이터 ${tempCount}건을 마감 처리합니다.\n마감 후에는 확정 데이터로 저장됩니다.\n계속하시겠습니까?`)) return
+
+    const { error } = await supabase.from('transactions')
+      .update({ is_closed: true, closed_at: new Date().toISOString() })
+      .eq('year', year).eq('month', month).eq('is_closed', false)
+
+    if (error) { alert('마감 실패: ' + error.message); return }
+    await fetchMonthData(year, month)
+    alert(`✅ ${year}년 ${month}월 마감 완료!`)
   }
 
   const handleSnapshot = async () => {
@@ -802,8 +795,8 @@ export default function DashboardPage() {
             <h1>📊 일류 손익 보고 대시보드</h1>
             <p className="subtitle">
               일류기획 | 주차별 손익 현황&nbsp;
-              {liveMode
-                ? <span className="data-status" style={{ background: '#fee2e2', color: '#dc2626' }}>🔴 실시간 {liveRows.length.toLocaleString()}건</span>
+              {monthData.some(t => !t.is_closed)
+                ? <span className="data-status" style={{ background: '#fef3c7', color: '#b45309' }}>📝 임시저장 {monthData.length.toLocaleString()}건</span>
                 : <span className="data-status">⚡ {monthData.length.toLocaleString()}건 로드됨</span>
               }
             </p>
@@ -816,12 +809,11 @@ export default function DashboardPage() {
               <span>{userEmail.split('@')[0]}</span>
               <button className="btn-logout" onClick={handleLogout}>로그아웃</button>
             </span>
-            {liveMode
-              ? <button className="btn btn-primary" style={{ background: '#dc2626' }} onClick={() => setLiveMode(false)}>📊 DB 보기로 전환</button>
-              : <button className="btn btn-primary" onClick={fetchLiveData} disabled={liveLoading}>{liveLoading ? '⏳ 로딩 중...' : '📡 구글 시트 실시간'}</button>
-            }
+            <button className="btn btn-primary" onClick={handleSyncSheets} disabled={syncLoading}>
+              {syncLoading ? '⏳ 동기화 중...' : '🔄 시트 동기화'}
+            </button>
             <button className="btn btn-secondary" onClick={handleSnapshot}>💾 보고서 저장</button>
-            <button className="btn btn-secondary" onClick={handleCloseMonth} disabled={liveLoading}>🗓️ 이번 달 마감</button>
+            <button className="btn btn-secondary" onClick={handleCloseMonth} disabled={syncLoading}>🗓️ 이번 달 마감</button>
             <button className="btn btn-secondary" onClick={handleRefresh} disabled={refreshing}>
               {refreshing ? '⏳ 불러오는 중...' : '🔄 새로고침'}
             </button>
