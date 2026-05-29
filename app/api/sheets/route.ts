@@ -1,30 +1,54 @@
 import { NextResponse } from 'next/server'
-import { importPKCS8, SignJWT } from 'jose'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
+function b64url(str: string) {
+  return Buffer.from(str).toString('base64url')
+}
+
 async function getAccessToken(): Promise<string> {
-  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!
+  const b64 = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').trim()
   const sa = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
 
-  // 키 정규화
-  const privateKeyPem: string = (sa.private_key as string)
-    .replace(/\\n/g, '\n')
-    .replace(/\r\n/g, '\n')
+  // PEM → DER 바이트 변환 (Web Crypto API용)
+  const pemKey: string = sa.private_key
+  const pemBody = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\\n/g, '')
+    .replace(/\n/g, '')
+    .replace(/\r/g, '')
+    .replace(/\s/g, '')
     .trim()
 
-  const privateKey = await importPKCS8(privateKeyPem, 'RS256')
+  const derBytes = Buffer.from(pemBody, 'base64')
+
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8',
+    derBytes,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
 
   const now = Math.floor(Date.now() / 1000)
-  const jwt = await new SignJWT({
+  const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+  const payload = b64url(JSON.stringify({
+    iss: sa.client_email,
     scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
-  })
-    .setProtectedHeader({ alg: 'RS256' })
-    .setIssuedAt(now)
-    .setExpirationTime(now + 3600)
-    .setIssuer(sa.client_email)
-    .setAudience('https://oauth2.googleapis.com/token')
-    .sign(privateKey)
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  }))
+
+  const sigInput = `${header}.${payload}`
+  const sigBytes = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    privateKey,
+    Buffer.from(sigInput)
+  )
+  const signature = Buffer.from(sigBytes).toString('base64url')
+  const jwt = `${sigInput}.${signature}`
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
