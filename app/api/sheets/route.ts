@@ -8,6 +8,15 @@ async function getAccessToken(): Promise<string> {
   const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!
   const sa = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
 
+  // 키 정규화: 이중 이스케이프, 윈도우 개행 등 처리
+  const rawKey: string = sa.private_key
+  const normalizedKey = rawKey
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .trim()
+
+  const keyObject = crypto.createPrivateKey({ key: normalizedKey, format: 'pem' })
+
   const now = Math.floor(Date.now() / 1000)
   const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url')
   const payload = Buffer.from(JSON.stringify({
@@ -21,7 +30,7 @@ async function getAccessToken(): Promise<string> {
   const signingInput = `${header}.${payload}`
   const sign = crypto.createSign('RSA-SHA256')
   sign.update(signingInput)
-  const signature = sign.sign(sa.private_key, 'base64url')
+  const signature = sign.sign(keyObject, 'base64url')
   const jwt = `${signingInput}.${signature}`
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
