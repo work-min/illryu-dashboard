@@ -231,11 +231,16 @@ function CompanyModal({ data, onClose }: { data: CompanyRow[]; onClose: () => vo
 /* ─── 메인 ─── */
 export default function DashboardPage() {
   const router = useRouter()
-  const [monthData, setMonthData] = useState<Transaction[]>([])   // 선택된 월 데이터
-  const [prevData, setPrevData] = useState<Transaction[]>([])     // 전월 데이터
-  const [periods, setPeriods] = useState<{ year: number; month: number }[]>([])  // 사용 가능한 년월 목록
+  const [monthData, setMonthData] = useState<Transaction[]>([])
+  const [prevData, setPrevData] = useState<Transaction[]>([])
+  const [periods, setPeriods] = useState<{ year: number; month: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  // 구글 시트 실시간 모드
+  const [liveMode, setLiveMode] = useState(false)
+  const [liveRows, setLiveRows] = useState<Transaction[]>([])
+  const [liveLoading, setLiveLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [dark, setDark] = useState(false)
 
@@ -346,7 +351,7 @@ export default function DashboardPage() {
     })
   }, [filterWeek, filterDay, selCats, search])
 
-  const currentRows = useMemo(() => applyFilters(monthData), [monthData, applyFilters])
+  const currentRows = useMemo(() => applyFilters(liveMode ? liveRows : monthData), [liveMode, liveRows, monthData, applyFilters])
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
   const prevRows = useMemo(() => prevData, [prevData])
@@ -429,11 +434,57 @@ export default function DashboardPage() {
     await fetchMonthData(year, month); setSelectedIds(new Set()); setBulkCat('')
   }
 
+  // 구글 시트 실시간 데이터 불러오기
+  const fetchLiveData = async () => {
+    setLiveLoading(true)
+    try {
+      const res = await fetch('/api/sheets')
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      setLiveRows(json.transactions || [])
+      setLiveMode(true)
+    } catch (err) {
+      alert('시트 데이터 로드 실패: ' + String(err))
+    } finally {
+      setLiveLoading(false)
+    }
+  }
+
+  // 이번달 마감: 구글 시트 → Supabase 저장
   const handleCloseMonth = async () => {
-    if (!confirm(`${year}년 ${month}월을 마감하시겠습니까?`)) return
-    const { error } = await supabase.from('transactions').update({ is_closed: true, closed_at: new Date().toISOString() }).eq('year', year).eq('month', month)
-    if (error) { alert('마감 실패: ' + error.message); return }
-    await fetchMonthData(year, month); alert(`✅ ${year}년 ${month}월 마감 완료`)
+    if (!confirm('구글 시트의 현재 데이터를 마감 처리합니다.\n시트 데이터를 DB에 저장하고 잠금 처리됩니다.\n계속하시겠습니까?')) return
+
+    setLiveLoading(true)
+    try {
+      // 시트에서 실시간 데이터 가져오기
+      const res = await fetch('/api/sheets')
+      const json = await res.json()
+      if (json.error) throw new Error(json.error)
+      const rows: Transaction[] = json.transactions || []
+      if (!rows.length) { alert('구글 시트에 데이터가 없습니다.'); return }
+
+      const closeYear = rows[0].year
+      const closeMonth = rows[0].month
+
+      // 기존 해당 월 데이터 삭제 후 재저장
+      await supabase.from('transactions').delete().eq('year', closeYear).eq('month', closeMonth)
+      const closeData = rows.map(t => ({ ...t, is_closed: true, closed_at: new Date().toISOString() }))
+
+      const BATCH = 100
+      for (let i = 0; i < closeData.length; i += BATCH) {
+        await supabase.from('transactions').insert(closeData.slice(i, i + BATCH))
+      }
+
+      await fetchPeriods()
+      setYear(closeYear)
+      setMonth(closeMonth)
+      setLiveMode(false)
+      alert(`✅ ${closeYear}년 ${closeMonth}월 마감 완료! (${rows.length}건 저장)`)
+    } catch (err) {
+      alert('마감 실패: ' + String(err))
+    } finally {
+      setLiveLoading(false)
+    }
   }
 
   const handleSnapshot = async () => {
@@ -631,7 +682,10 @@ export default function DashboardPage() {
             <h1>📊 일류 손익 보고 대시보드</h1>
             <p className="subtitle">
               일류기획 | 주차별 손익 현황&nbsp;
-              <span className="data-status">⚡ {monthData.length.toLocaleString()}건 로드됨</span>
+              {liveMode
+                ? <span className="data-status" style={{ background: '#fee2e2', color: '#dc2626' }}>🔴 실시간 {liveRows.length.toLocaleString()}건</span>
+                : <span className="data-status">⚡ {monthData.length.toLocaleString()}건 로드됨</span>
+              }
             </p>
           </div>
           <div className="header-right">
@@ -642,8 +696,12 @@ export default function DashboardPage() {
               <span>{userEmail.split('@')[0]}</span>
               <button className="btn-logout" onClick={handleLogout}>로그아웃</button>
             </span>
-            <button className="btn btn-primary" onClick={handleSnapshot}>💾 이번 주 보고서 저장</button>
-            <button className="btn btn-secondary" onClick={handleCloseMonth}>🗓️ 이번 달 마감</button>
+            {liveMode
+              ? <button className="btn btn-primary" style={{ background: '#dc2626' }} onClick={() => setLiveMode(false)}>📊 DB 보기로 전환</button>
+              : <button className="btn btn-primary" onClick={fetchLiveData} disabled={liveLoading}>{liveLoading ? '⏳ 로딩 중...' : '📡 구글 시트 실시간'}</button>
+            }
+            <button className="btn btn-secondary" onClick={handleSnapshot}>💾 보고서 저장</button>
+            <button className="btn btn-secondary" onClick={handleCloseMonth} disabled={liveLoading}>🗓️ 이번 달 마감</button>
             <button className="btn btn-secondary" onClick={handleRefresh} disabled={refreshing}>
               {refreshing ? '⏳ 불러오는 중...' : '🔄 새로고침'}
             </button>
