@@ -1,37 +1,30 @@
 import { NextResponse } from 'next/server'
-import crypto from 'crypto'
+import { importPKCS8, SignJWT } from 'jose'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
-// googleapis 라이브러리 없이 Node.js 내장 crypto로 직접 JWT 서명
 async function getAccessToken(): Promise<string> {
   const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!
   const sa = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
 
-  // 키 정규화: 이중 이스케이프, 윈도우 개행 등 처리
-  const rawKey: string = sa.private_key
-  const normalizedKey = rawKey
+  // 키 정규화
+  const privateKeyPem: string = (sa.private_key as string)
     .replace(/\\n/g, '\n')
     .replace(/\r\n/g, '\n')
     .trim()
 
-  const keyObject = crypto.createPrivateKey({ key: normalizedKey, format: 'pem' })
+  const privateKey = await importPKCS8(privateKeyPem, 'RS256')
 
   const now = Math.floor(Date.now() / 1000)
-  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url')
-  const payload = Buffer.from(JSON.stringify({
-    iss: sa.client_email,
+  const jwt = await new SignJWT({
     scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  })).toString('base64url')
-
-  const signingInput = `${header}.${payload}`
-  const sign = crypto.createSign('RSA-SHA256')
-  sign.update(signingInput)
-  const signature = sign.sign(keyObject, 'base64url')
-  const jwt = `${signingInput}.${signature}`
+  })
+    .setProtectedHeader({ alg: 'RS256' })
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .setIssuer(sa.client_email)
+    .setAudience('https://oauth2.googleapis.com/token')
+    .sign(privateKey)
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
