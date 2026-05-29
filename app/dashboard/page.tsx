@@ -85,6 +85,118 @@ function MultiSelect({ label, options, selected, onChange }: {
   )
 }
 
+/* ─── 수정/추가 모달 ─── */
+function getKoreanWeek(dateStr: string): string {
+  const date = new Date(dateStr)
+  const firstDay = new Date(date.getFullYear(), date.getMonth(), 1)
+  const firstDayOfWeek = (firstDay.getDay() + 6) % 7
+  return Math.ceil((date.getDate() + firstDayOfWeek) / 7) + '주차'
+}
+
+interface EditModalProps {
+  row: Partial<Transaction> | null   // null이면 새 항목 추가
+  categories: string[]
+  onSave: () => void
+  onClose: () => void
+}
+
+function EditModal({ row, categories, onSave, onClose }: EditModalProps) {
+  const isNew = !row?.id
+  const [form, setForm] = useState({
+    date:       row?.date       || new Date().toISOString().slice(0, 10),
+    manager:    row?.manager    || '',
+    company:    row?.company    || '',
+    trade_name: row?.trade_name || '',
+    category:   row?.category   || '접수형',
+    sales:      row?.sales      ?? 0,
+    purchase:   row?.purchase   ?? 0,
+  })
+  const [saving, setSaving] = useState(false)
+
+  const profit = (Number(form.sales) || 0) - (Number(form.purchase) || 0)
+
+  const handleSave = async () => {
+    if (!form.date) return
+    setSaving(true)
+    const dateObj = new Date(form.date)
+    const record = {
+      date:       form.date,
+      year:       dateObj.getFullYear(),
+      month:      dateObj.getMonth() + 1,
+      day:        dateObj.getDate(),
+      week:       getKoreanWeek(form.date),
+      manager:    form.manager.trim(),
+      company:    form.company.trim(),
+      trade_name: form.trade_name.trim(),
+      category:   form.category.trim() || '(미분류)',
+      sales:      Number(form.sales) || 0,
+      purchase:   Number(form.purchase) || 0,
+      profit,
+      source:     'manual' as const,
+    }
+    if (isNew) {
+      await supabase.from('transactions').insert(record)
+    } else {
+      await supabase.from('transactions').update(record).eq('id', row!.id!)
+    }
+    setSaving(false)
+    onSave()
+  }
+
+  const fieldStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 500 }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{isNew ? '✏️ 거래 추가' : '✏️ 거래 수정'}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div style={{ gridColumn: '1/-1' }}>
+            <label style={labelStyle}>일자</label>
+            <input type="date" style={fieldStyle} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+          </div>
+          <div>
+            <label style={labelStyle}>담당자</label>
+            <input style={fieldStyle} value={form.manager} onChange={e => setForm(f => ({ ...f, manager: e.target.value }))} placeholder="담당자" />
+          </div>
+          <div>
+            <label style={labelStyle}>구분</label>
+            <input style={fieldStyle} list="cat-list" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="접수형, 관리형 등" />
+            <datalist id="cat-list">{categories.map(c => <option key={c} value={c} />)}</datalist>
+          </div>
+          <div>
+            <label style={labelStyle}>대행사명</label>
+            <input style={fieldStyle} value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="대행사명" />
+          </div>
+          <div>
+            <label style={labelStyle}>상호명</label>
+            <input style={fieldStyle} value={form.trade_name} onChange={e => setForm(f => ({ ...f, trade_name: e.target.value }))} placeholder="상호명" />
+          </div>
+          <div>
+            <label style={labelStyle}>매출</label>
+            <input type="number" style={fieldStyle} value={form.sales} onChange={e => setForm(f => ({ ...f, sales: +e.target.value }))} />
+          </div>
+          <div>
+            <label style={labelStyle}>매입</label>
+            <input type="number" style={fieldStyle} value={form.purchase} onChange={e => setForm(f => ({ ...f, purchase: +e.target.value }))} />
+          </div>
+          <div style={{ gridColumn: '1/-1', background: 'var(--badge-bg)', borderRadius: 8, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>순익 (자동계산)</span>
+            <span style={{ fontSize: 20, fontWeight: 700, color: profit >= 0 ? 'var(--primary)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>{profit.toLocaleString('ko-KR')}</span>
+          </div>
+        </div>
+        <div style={{ padding: '0 20px 20px', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? '저장 중...' : '저장'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── 피벗 테이블 ─── */
 function PivotTable({ rows }: { rows: Transaction[] }) {
   const groups = useMemo(() => {
@@ -271,6 +383,7 @@ export default function DashboardPage() {
   const [bulkCat, setBulkCat] = useState('')
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
+  const [editRow, setEditRow] = useState<Partial<Transaction> | null>(null)  // null = 닫힘, {} = 새 항목, row = 수정
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
@@ -901,6 +1014,11 @@ export default function DashboardPage() {
           <section className="card">
             <div className="card-header">
               <h3>상세 거래 리스트</h3>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setEditRow({ year, month: month || new Date().getMonth() + 1 })}
+                style={{ marginLeft: 'auto', marginRight: 12 }}
+              >+ 거래 추가</button>
               <div className="detail-summary">
                 <span className="badge" id="detailCount">{tableData.length}건</span>
                 <span className="detail-kpi sales">💰 매출:<strong>{fmt(tableData.reduce((s, t) => s + (t.sales || 0), 0))}</strong></span>
@@ -956,8 +1074,9 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {pagedData.map(t => (
-                    <tr key={t.id} style={{ background: selectedIds.has(t.id) ? 'var(--badge-bg)' : undefined }}>
-                      <td className="check-col">
+                    <tr key={t.id} style={{ background: selectedIds.has(t.id) ? 'var(--badge-bg)' : undefined, cursor: 'pointer' }}
+                      onClick={e => { if ((e.target as HTMLElement).tagName !== 'INPUT') setEditRow(t) }}>
+                      <td className="check-col" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" className="row-check" checked={selectedIds.has(t.id)} onChange={() => toggleId(t.id)} />
                       </td>
                       <td>{t.date}</td>
@@ -990,6 +1109,14 @@ export default function DashboardPage() {
       </div>
 
       {showModal && <CompanyModal data={companyData} onClose={() => setShowModal(false)} />}
+      {editRow !== null && (
+        <EditModal
+          row={editRow}
+          categories={categories}
+          onSave={async () => { setEditRow(null); await fetchMonthData(year, month) }}
+          onClose={() => setEditRow(null)}
+        />
+      )}
     </>
   )
 }
