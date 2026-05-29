@@ -44,10 +44,17 @@ function MultiSelect({ label, options, selected, onChange }: {
     return () => document.removeEventListener('mousedown', h)
   }, [])
   const toggle = (v: string) => { const n = new Set(selected); n.has(v) ? n.delete(v) : n.add(v); onChange(n) }
-  const isAll = selected.size === 0
-  const text = isAll ? '전체' : selected.size === 1 ? [...selected][0] : `${[...selected][0]} 외 ${selected.size - 1}개`
+  const allSelected = selected.size === options.length
+  const noneSelected = selected.size === 0
+  const text = noneSelected ? '전체' : selected.size === 1 ? [...selected][0] : `${[...selected][0]} 외 ${selected.size - 1}개`
+
+  const handleToggleAll = () => {
+    if (allSelected || (!noneSelected && !allSelected)) onChange(new Set())  // 전체 해제
+    else onChange(new Set(options))  // 전체 선택
+  }
+
   return (
-    <div className="filter-item" ref={ref} style={{ position: 'relative' }}>
+    <div className="filter-item" ref={ref} style={{ position: 'relative', minWidth: 160 }}>
       <label>{label}</label>
       <button
         onClick={() => setOpen(o => !o)}
@@ -58,17 +65,13 @@ function MultiSelect({ label, options, selected, onChange }: {
         <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0 }}>▼</span>
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow)', maxHeight: 280, overflowY: 'auto', zIndex: 20, minWidth: 160 }}>
-          {/* 전체 선택/해제 */}
-          <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow)', maxHeight: 280, overflowY: 'auto', zIndex: 20, minWidth: 160 }}>
+          {/* 전체 선택/해제 토글 */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
             <button
-              onClick={() => onChange(new Set())}
-              style={{ flex: 1, padding: '4px 0', fontSize: 12, fontWeight: 600, background: isAll ? 'var(--primary)' : 'var(--surface)', color: isAll ? 'white' : 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}
-            >전체</button>
-            <button
-              onClick={() => onChange(new Set(options))}
-              style={{ flex: 1, padding: '4px 0', fontSize: 12, fontWeight: 600, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}
-            >전체선택</button>
+              onClick={handleToggleAll}
+              style={{ width: '100%', padding: '5px 0', fontSize: 12, fontWeight: 700, background: noneSelected ? 'var(--primary)' : 'var(--surface)', color: noneSelected ? 'white' : 'var(--text)', border: `1px solid ${noneSelected ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}
+            >{noneSelected ? '전체 선택' : '전체 해제'}</button>
           </div>
           {options.map(o => (
             <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', fontSize: 13, userSelect: 'none', color: 'var(--text)' }}
@@ -445,17 +448,12 @@ export default function DashboardPage() {
     setRefreshing(false)
   }
 
-  /* ─ 드롭다운용 파생 데이터 ─ */
+  /* ─ 드롭다운 고정 목록 ─ */
   const years = useMemo(() => [...new Set(periods.map(p => p.year))].sort((a, b) => a - b), [periods])
-  // 월은 항상 1~12 전체 표시 (데이터 없는 달도 선택 가능)
-  const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), [])
-  const weeks = useMemo(() => WEEK_ORDER.filter(w => monthData.some(t => t.week === w)), [monthData])
-  // 주차 선택 시 해당 주차 일자만 표시
-  const days = useMemo(() =>
-    [...new Set(monthData.filter(t => !filterWeek || t.week === filterWeek).map(t => t.day))]
-    .sort((a, b) => a - b)
-  , [monthData, filterWeek])
-  const categories = useMemo(() => [...new Set(monthData.map(t => t.category).filter(Boolean))].sort(), [monthData])
+  const availableMonths = Array.from({ length: 12 }, (_, i) => i + 1)              // 1~12 고정
+  const weeks = WEEK_ORDER                                                           // 1~5주차 고정
+  const days = Array.from({ length: 31 }, (_, i) => i + 1)                         // 1~31일 고정
+  const FIXED_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장완료', '중단건'] // 구분 고정 목록
 
   /* ─ 필터 적용 ─ */
   const applyFilters = useCallback((rows: Transaction[]) => {
@@ -862,7 +860,7 @@ export default function DashboardPage() {
               {days.map(d => <option key={d} value={d}>{d}일</option>)}
             </select>
           </div>
-          <MultiSelect label="구분 (다중 선택)" options={categories} selected={selCats} onChange={s => { setSelCats(s); setPage(1) }} />
+          <MultiSelect label="구분 (다중 선택)" options={FIXED_CATEGORIES} selected={selCats} onChange={s => { setSelCats(s); setPage(1) }} />
           <div className="filter-item search">
             <label>🔍 검색</label>
             <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="업체명/상호명 (부분 검색)" />
@@ -1112,7 +1110,7 @@ export default function DashboardPage() {
       {editRow !== null && (
         <EditModal
           row={editRow}
-          categories={categories}
+          categories={FIXED_CATEGORIES}
           onSave={async () => { setEditRow(null); await fetchMonthData(year, month) }}
           onClose={() => setEditRow(null)}
         />
