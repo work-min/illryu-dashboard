@@ -473,7 +473,7 @@ export default function DashboardPage() {
   const availableMonths = Array.from({ length: 12 }, (_, i) => i + 1)
   const weeks = WEEK_ORDER
   const days = Array.from({ length: 31 }, (_, i) => i + 1)
-  const FIXED_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장완료', '중단건']
+  const FIXED_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장 완료', '중단건', '오세팅건']
 
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
