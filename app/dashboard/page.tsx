@@ -358,10 +358,11 @@ function CompanyModal({ data, onClose }: { data: CompanyRow[]; onClose: () => vo
 /* ─── 메인 ─── */
 export default function DashboardPage() {
   const router = useRouter()
-  const [monthData, setMonthData] = useState<Transaction[]>([])
-  const [prevData, setPrevData] = useState<Transaction[]>([])
+  const [currentRows, setCurrentRows] = useState<Transaction[]>([])  // DB 직접 조회 결과
+  const [prevRows, setPrevRows] = useState<Transaction[]>([])         // 전월 비교용
   const [periods, setPeriods] = useState<{ year: number; month: number }[]>([])
   const [loading, setLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [syncLoading, setSyncLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
@@ -375,6 +376,7 @@ export default function DashboardPage() {
   const [selCats, setSelCats] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
 
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sortCol, setSortCol] = useState('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [colFilters, setColFilters] = useState<Record<string, string>>({})
@@ -388,22 +390,35 @@ export default function DashboardPage() {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
   }, [dark])
 
-  // 데이터 조회 (y=0 전체, m=0 전체)
-  const fetchMonthData = useCallback(async (y: number, m: number) => {
-    let q = supabase.from('transactions').select('*').order('date', { ascending: true }).limit(2000)
-    if (y > 0) q = q.eq('year', y)
-    if (m > 0) q = q.eq('month', m)
-    const { data: curr } = await q
-    setMonthData(curr || [])
+  // 모든 필터 조건을 DB에 직접 전달해서 조회
+  const fetchFilteredData = useCallback(async (
+    y: number, m: number, week: string, day: string, cats: Set<string>, s: string
+  ) => {
+    setDataLoading(true)
+    try {
+      let q = supabase.from('transactions').select('*').order('date', { ascending: true })
+      if (y > 0) q = q.eq('year', y)
+      if (m > 0) q = q.eq('month', m)
+      if (week) q = q.eq('week', week)
+      if (day) q = q.eq('day', Number(day))
+      if (cats.size > 0) q = q.in('category', [...cats])
+      if (s.trim()) q = q.or(`company.ilike.%${s}%,trade_name.ilike.%${s}%,manager.ilike.%${s}%`)
 
-    // 전월 비교는 년+월 모두 지정된 경우만
-    if (y > 0 && m > 0) {
-      const pm = m === 1 ? 12 : m - 1
-      const py = m === 1 ? y - 1 : y
-      const { data: prev } = await supabase.from('transactions').select('*').eq('year', py).eq('month', pm).order('date', { ascending: true }).limit(2000)
-      setPrevData(prev || [])
-    } else {
-      setPrevData([])
+      const { data } = await q
+      setCurrentRows(data || [])
+
+      // 전월 비교: 년+월 지정된 경우만 (다른 필터 없이 월 전체)
+      if (y > 0 && m > 0) {
+        const pm = m === 1 ? 12 : m - 1
+        const py = m === 1 ? y - 1 : y
+        const { data: prev } = await supabase.from('transactions')
+          .select('*').eq('year', py).eq('month', pm)
+        setPrevRows(prev || [])
+      } else {
+        setPrevRows([])
+      }
+    } finally {
+      setDataLoading(false)
     }
   }, [])
 
@@ -431,46 +446,37 @@ export default function DashboardPage() {
     })
   }, [router, fetchPeriods])
 
-  // 년/월 변경 시 데이터 로드 (초기화 후에만)
+  // 검색 디바운스 (300ms)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // 필터 변경 시 DB 직접 조회 (초기화 후에만)
   useEffect(() => {
     if (!initializedRef.current) return
-    fetchMonthData(year, month)
-  }, [year, month, fetchMonthData])
+    fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch)
+  }, [year, month, filterWeek, filterDay, selCats, debouncedSearch, fetchFilteredData])
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
   const handleRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([fetchPeriods(), fetchMonthData(year, month)])
+    await Promise.all([
+      fetchPeriods(),
+      fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch)
+    ])
     setRefreshing(false)
   }
 
   /* ─ 드롭다운 고정 목록 ─ */
   const years = useMemo(() => [...new Set(periods.map(p => p.year))].sort((a, b) => a - b), [periods])
-  const availableMonths = Array.from({ length: 12 }, (_, i) => i + 1)              // 1~12 고정
-  const weeks = WEEK_ORDER                                                           // 1~5주차 고정
-  const days = Array.from({ length: 31 }, (_, i) => i + 1)                         // 1~31일 고정
-  const FIXED_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장완료', '중단건'] // 구분 고정 목록
+  const availableMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+  const weeks = WEEK_ORDER
+  const days = Array.from({ length: 31 }, (_, i) => i + 1)
+  const FIXED_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장완료', '중단건']
 
-  /* ─ 필터 적용 ─ */
-  const applyFilters = useCallback((rows: Transaction[]) => {
-    return rows.filter(t => {
-      if (filterWeek && t.week !== filterWeek) return false
-      if (filterDay && t.day !== Number(filterDay)) return false
-      if (selCats.size > 0 && !selCats.has(t.category)) return false
-      if (search) {
-        const q = search.toLowerCase()
-        if (!(t.company || '').toLowerCase().includes(q) &&
-            !(t.trade_name || '').toLowerCase().includes(q) &&
-            !(t.manager || '').toLowerCase().includes(q)) return false
-      }
-      return true
-    })
-  }, [filterWeek, filterDay, selCats, search])
-
-  const currentRows = useMemo(() => applyFilters(monthData), [monthData, applyFilters])
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
-  const prevRows = useMemo(() => prevData, [prevData])
 
   const kpi = useMemo(() => calcKPI(currentRows), [currentRows])
   const prevKpi = useMemo(() => calcKPI(prevRows), [prevRows])
@@ -547,7 +553,8 @@ export default function DashboardPage() {
     if (!confirm(`${selectedIds.size}건을 '${bulkCat}'(으)로 변경하시겠습니까?`)) return
     const { error } = await supabase.from('transactions').update({ category: bulkCat.trim() }).in('id', [...selectedIds])
     if (error) { alert('변경 실패: ' + error.message); return }
-    await fetchMonthData(year, month); setSelectedIds(new Set()); setBulkCat('')
+    await fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch)
+    setSelectedIds(new Set()); setBulkCat('')
   }
 
   // 시트 동기화: 구글 시트 읽어서 DB에 임시 저장 (is_closed=false)
@@ -576,7 +583,7 @@ export default function DashboardPage() {
       await fetchPeriods()
       setYear(syncYear)
       setMonth(syncMonth)
-      await fetchMonthData(syncYear, syncMonth)
+      await fetchFilteredData(syncYear, syncMonth, '', '', new Set(), '')
       alert(`✅ ${syncYear}년 ${syncMonth}월 동기화 완료! (${rows.length}건 임시 저장)`)
     } catch (err) {
       alert('동기화 실패: ' + String(err))
@@ -587,7 +594,7 @@ export default function DashboardPage() {
 
   // 월 마감: 임시(is_closed=false) → 확정(is_closed=true)
   const handleCloseMonth = async () => {
-    const tempCount = monthData.filter(t => !t.is_closed).length
+    const tempCount = currentRows.filter(t => !t.is_closed).length
     if (tempCount === 0) { alert('마감할 임시 데이터가 없습니다.\n먼저 시트 동기화를 해주세요.'); return }
     if (!confirm(`${year}년 ${month}월 데이터 ${tempCount}건을 마감 처리합니다.\n마감 후에는 확정 데이터로 저장됩니다.\n계속하시겠습니까?`)) return
 
@@ -596,7 +603,7 @@ export default function DashboardPage() {
       .eq('year', year).eq('month', month).eq('is_closed', false)
 
     if (error) { alert('마감 실패: ' + error.message); return }
-    await fetchMonthData(year, month)
+    await fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch)
     alert(`✅ ${year}년 ${month}월 마감 완료!`)
   }
 
@@ -795,9 +802,9 @@ export default function DashboardPage() {
             <h1>📊 일류 손익 보고 대시보드</h1>
             <p className="subtitle">
               일류기획 | 주차별 손익 현황&nbsp;
-              {monthData.some(t => !t.is_closed)
-                ? <span className="data-status" style={{ background: '#fef3c7', color: '#b45309' }}>📝 임시저장 {monthData.length.toLocaleString()}건</span>
-                : <span className="data-status">⚡ {monthData.length.toLocaleString()}건 로드됨</span>
+              {currentRows.some(t => !t.is_closed)
+                ? <span className="data-status" style={{ background: '#fef3c7', color: '#b45309' }}>📝 임시저장 {currentRows.length.toLocaleString()}건</span>
+                : <span className="data-status">⚡ {currentRows.length.toLocaleString()}건 로드됨</span>
               }
             </p>
           </div>
@@ -1103,7 +1110,7 @@ export default function DashboardPage() {
         <EditModal
           row={editRow}
           categories={FIXED_CATEGORIES}
-          onSave={async () => { setEditRow(null); await fetchMonthData(year, month) }}
+          onSave={async () => { setEditRow(null); await fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch) }}
           onClose={() => setEditRow(null)}
         />
       )}
