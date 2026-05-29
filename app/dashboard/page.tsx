@@ -44,7 +44,8 @@ function MultiSelect({ label, options, selected, onChange }: {
     return () => document.removeEventListener('mousedown', h)
   }, [])
   const toggle = (v: string) => { const n = new Set(selected); n.has(v) ? n.delete(v) : n.add(v); onChange(n) }
-  const text = selected.size === 0 ? '전체' : selected.size === 1 ? [...selected][0] : `${[...selected][0]} 외 ${selected.size - 1}개`
+  const isAll = selected.size === 0
+  const text = isAll ? '전체' : selected.size === 1 ? [...selected][0] : `${[...selected][0]} 외 ${selected.size - 1}개`
   return (
     <div className="filter-item" ref={ref} style={{ position: 'relative' }}>
       <label>{label}</label>
@@ -57,7 +58,18 @@ function MultiSelect({ label, options, selected, onChange }: {
         <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0 }}>▼</span>
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow)', maxHeight: 240, overflowY: 'auto', zIndex: 20, minWidth: 160 }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow)', maxHeight: 280, overflowY: 'auto', zIndex: 20, minWidth: 160 }}>
+          {/* 전체 선택/해제 */}
+          <div style={{ display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+            <button
+              onClick={() => onChange(new Set())}
+              style={{ flex: 1, padding: '4px 0', fontSize: 12, fontWeight: 600, background: isAll ? 'var(--primary)' : 'var(--surface)', color: isAll ? 'white' : 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}
+            >전체</button>
+            <button
+              onClick={() => onChange(new Set(options))}
+              style={{ flex: 1, padding: '4px 0', fontSize: 12, fontWeight: 600, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}
+            >전체선택</button>
+          </div>
           {options.map(o => (
             <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', fontSize: 13, userSelect: 'none', color: 'var(--text)' }}
               onMouseOver={e => (e.currentTarget.style.background = 'var(--hover-bg)')}
@@ -322,11 +334,8 @@ export default function DashboardPage() {
 
   /* ─ 드롭다운용 파생 데이터 ─ */
   const years = useMemo(() => [...new Set(periods.map(p => p.year))].sort((a, b) => a - b), [periods])
-  const availableMonths = useMemo(() =>
-    year > 0
-      ? periods.filter(p => p.year === year).map(p => p.month).sort((a, b) => a - b)
-      : [...new Set(periods.map(p => p.month))].sort((a, b) => a - b)
-  , [periods, year])
+  // 월은 항상 1~12 전체 표시 (데이터 없는 달도 선택 가능)
+  const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), [])
   const weeks = useMemo(() => WEEK_ORDER.filter(w => monthData.some(t => t.week === w)), [monthData])
   // 주차 선택 시 해당 주차 일자만 표시
   const days = useMemo(() =>
