@@ -20,7 +20,7 @@ export default function LoginPage() {
       const msg =
         authError.message.includes('Invalid login') ? '이메일 또는 비밀번호가 올바르지 않습니다.' :
         authError.message.includes('Email not confirmed') ? '이메일 인증이 필요합니다.' :
-        `로그인 오류: ${authError.message}`
+        '로그인에 실패했습니다. 다시 시도해주세요.'
       setError(msg)
       setLoading(false)
     } else {
