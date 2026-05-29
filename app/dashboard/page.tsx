@@ -302,10 +302,10 @@ export default function DashboardPage() {
     if (data && data.length > 0) {
       setPeriods(data)
       if (!initializedRef.current) {
-        const maxYear = Math.max(...data.map(p => p.year))
-        const maxMonth = Math.max(...data.filter(p => p.year === maxYear).map(p => p.month))
-        setYear(maxYear)
-        setMonth(maxMonth)
+        // 한국 시간(KST = UTC+9) 기준 당월로 초기화
+        const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000)
+        setYear(kstNow.getUTCFullYear())
+        setMonth(kstNow.getUTCMonth() + 1)
         initializedRef.current = true
       }
     }
