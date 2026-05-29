@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
+import { JWT } from 'google-auth-library'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
 function getAuth() {
   const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!
-  const credentials = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
-  return new google.auth.GoogleAuth({
-    credentials,
+  const sa = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'))
+  return new JWT({
+    email: sa.client_email,
+    key: sa.private_key,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   })
 }
