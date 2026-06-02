@@ -167,8 +167,9 @@ function EditModal({ row, categories, onSave, onClose }: EditModalProps) {
           </div>
           <div>
             <label style={labelStyle}>구분</label>
-            <input style={fieldStyle} list="cat-list" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="접수형, 관리형 등" />
-            <datalist id="cat-list">{categories.map(c => <option key={c} value={c} />)}</datalist>
+            <select style={fieldStyle} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <div>
             <label style={labelStyle}>대행사명</label>
@@ -701,6 +702,8 @@ export default function DashboardPage() {
         .btn-secondary:hover{background:var(--hover-bg)}
         .btn-ghost{background:transparent;color:var(--text-muted)}
         .btn-ghost:hover{background:var(--hover-bg)}
+        .btn-danger{background:var(--danger);color:white;border-color:var(--danger)}
+        .btn-danger:hover{opacity:0.85}
         .btn-sm{padding:5px 12px;font-size:12px;height:30px}
         .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
         .kpi-card{background:var(--surface);padding:20px;border-radius:var(--radius);box-shadow:var(--shadow);border-left:4px solid var(--primary)}
@@ -812,18 +815,17 @@ export default function DashboardPage() {
             <button className="theme-toggle" onClick={() => setDark(d => !d)} title="다크/라이트 모드">
               {dark ? '☀️' : '🌙'}
             </button>
-            <span className="user-badge">
-              <span>{userEmail.split('@')[0]}</span>
-              <button className="btn-logout" onClick={handleLogout}>로그아웃</button>
-            </span>
+            <div className="user-badge" style={{flexDirection:'column',alignItems:'flex-start',gap:'4px'}}>
+              <div style={{display:'flex',alignItems:'center'}}>
+                <span>{userEmail.split('@')[0]}</span>
+                <button className="btn-logout" onClick={handleLogout}>로그아웃</button>
+              </div>
+              <button className="btn btn-danger btn-sm" onClick={handleCloseMonth} disabled={syncLoading} style={{width:'100%'}}>🗓️ 이번 달 마감</button>
+            </div>
             <button className="btn btn-primary" onClick={handleSyncSheets} disabled={syncLoading}>
               {syncLoading ? '⏳ 동기화 중...' : '🔄 시트 동기화'}
             </button>
             <button className="btn btn-secondary" onClick={handleSnapshot}>💾 보고서 저장</button>
-            <button className="btn btn-secondary" onClick={handleCloseMonth} disabled={syncLoading}>🗓️ 이번 달 마감</button>
-            <button className="btn btn-secondary" onClick={handleRefresh} disabled={refreshing}>
-              {refreshing ? '⏳ 불러오는 중...' : '🔄 새로고침'}
-            </button>
             <button className="btn btn-secondary" onClick={handlePDF}>📄 PDF 다운로드</button>
           </div>
         </header>
