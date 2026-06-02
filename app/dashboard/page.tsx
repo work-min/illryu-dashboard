@@ -815,13 +815,10 @@ export default function DashboardPage() {
             <button className="theme-toggle" onClick={() => setDark(d => !d)} title="다크/라이트 모드">
               {dark ? '☀️' : '🌙'}
             </button>
-            <div className="user-badge" style={{flexDirection:'column',alignItems:'flex-start',gap:'4px'}}>
-              <div style={{display:'flex',alignItems:'center'}}>
-                <span>{userEmail.split('@')[0]}</span>
-                <button className="btn-logout" onClick={handleLogout}>로그아웃</button>
-              </div>
-              <button className="btn btn-danger btn-sm" onClick={handleCloseMonth} disabled={syncLoading} style={{width:'100%'}}>🗓️ 이번 달 마감</button>
-            </div>
+            <span className="user-badge">
+              <span>{userEmail.split('@')[0]}</span>
+              <button className="btn-logout" onClick={handleLogout}>로그아웃</button>
+            </span>
             <button className="btn btn-primary" onClick={handleSyncSheets} disabled={syncLoading}>
               {syncLoading ? '⏳ 동기화 중...' : '🔄 시트 동기화'}
             </button>
@@ -1105,6 +1102,14 @@ export default function DashboardPage() {
             )}
           </section>
         </main>
+        <button
+          className="btn btn-danger"
+          onClick={handleCloseMonth}
+          disabled={syncLoading}
+          style={{position:'fixed',bottom:'32px',right:'32px',zIndex:900,boxShadow:'0 4px 16px rgba(0,0,0,0.2)',padding:'12px 24px',fontSize:'14px'}}
+        >
+          🗓️ 이번 달 마감
+        </button>
       </div>
 
       {showModal && <CompanyModal data={companyData} onClose={() => setShowModal(false)} />}
