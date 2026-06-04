@@ -78,6 +78,11 @@ export default function SettlementPage() {
   const totalPayroll = employees.reduce((s, e) => s + e.net, 0)
   const finalProfit = operatingProfit - totalPayroll - expenses.total
 
+  const fmtRate = (n: number) => (isFinite(n) ? n.toFixed(1) + '%' : '-')
+  const payrollRate = operatingProfit > 0 ? (totalPayroll / operatingProfit) * 100 : 0
+  const expenseRate = operatingProfit > 0 ? (expenses.total / operatingProfit) * 100 : 0
+  const finalRate = operatingProfit > 0 ? (finalProfit / operatingProfit) * 100 : 0
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontSize: 18, fontFamily: 'sans-serif' }}>
       로딩 중...
@@ -180,15 +185,15 @@ export default function SettlementPage() {
             <div className="page-subtitle">{yearMonth.year}년 {yearMonth.month}월 기준</div>
           </div>
 
-          {/* KPI 카드 */}
+          {/* 주요 KPI */}
           <section className="kpi-row">
             <div className="kpi-card">
-              <div className="kpi-label">영업 이익</div>
+              <div className="kpi-label">총 영업이익</div>
               <div className={`kpi-value ${operatingProfit < 0 ? 'negative' : ''}`}>{fmt(operatingProfit)}</div>
               <div className="kpi-sub">손익 대시보드 기준</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-label">영업자 총 급여</div>
+              <div className="kpi-label">영업팀 총 급여</div>
               <div className="kpi-value">{fmt(totalPayroll)}</div>
               <div className="kpi-sub">{employees.length}명</div>
             </div>
@@ -198,9 +203,28 @@ export default function SettlementPage() {
               <div className="kpi-sub">고정 + 유동</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-label">최종 손익</div>
+              <div className="kpi-label">최종 이익</div>
               <div className={`kpi-value ${finalProfit < 0 ? 'negative' : 'positive'}`}>{fmt(finalProfit)}</div>
               <div className="kpi-sub">영업이익 - 급여 - 지출</div>
+            </div>
+          </section>
+
+          {/* 보조 KPI (비율 지표) */}
+          <section style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'16px'}}>
+            <div className="kpi-card" style={{borderLeft:'3px solid #f59e0b'}}>
+              <div className="kpi-label">인건비 비율</div>
+              <div className="kpi-value" style={{fontSize:'32px'}}>{fmtRate(payrollRate)}</div>
+              <div className="kpi-sub">영업팀 급여 ÷ 영업이익</div>
+            </div>
+            <div className="kpi-card" style={{borderLeft:'3px solid #a855f7'}}>
+              <div className="kpi-label">지출 비율</div>
+              <div className="kpi-value" style={{fontSize:'32px'}}>{fmtRate(expenseRate)}</div>
+              <div className="kpi-sub">총 지출 ÷ 영업이익</div>
+            </div>
+            <div className="kpi-card" style={{borderLeft:`3px solid ${finalRate >= 0 ? '#16a34a' : '#dc2626'}`}}>
+              <div className="kpi-label">최종 이익률</div>
+              <div className={`kpi-value ${finalRate < 0 ? 'negative' : 'positive'}`} style={{fontSize:'32px'}}>{fmtRate(finalRate)}</div>
+              <div className="kpi-sub">최종 이익 ÷ 영업이익</div>
             </div>
           </section>
 
