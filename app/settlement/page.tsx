@@ -2,6 +2,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, LineChart, Line, Legend, Cell
+} from 'recharts'
 
 interface Employee { name: string; net: number; note: string }
 interface Expenses { fixed: number; variable: number; total: number }
@@ -102,6 +106,10 @@ export default function SettlementPage() {
   const [simFixed, setSimFixed] = useState(0)
   const [simVariable, setSimVariable] = useState(0)
 
+  // 전월 비교 + 월별 추이
+  const [prevRecord, setPrevRecord] = useState<Record<string,number>|null>(null)
+  const [monthlyTrend, setMonthlyTrend] = useState<{label:string,final_profit:number,operating_profit:number}[]>([])
+
   const fmt = (n: number) => n.toLocaleString('ko-KR')
   const fmtSign = (n: number) => (n >= 0 ? '+' : '') + fmt(n)
   const fmtRate = (n: number) => isFinite(n) && n !== 0 ? n.toFixed(1) + '%' : '-'
@@ -130,6 +138,15 @@ export default function SettlementPage() {
 
     const { data: txData } = await supabase.from('transactions').select('profit').eq('year', y).eq('month', m)
     setOperatingProfit(txData ? txData.reduce((s, t) => s + (t.profit || 0), 0) : 0)
+
+    // 전월 정산 레코드
+    const prevY = m === 1 ? y - 1 : y, prevM = m === 1 ? 12 : m - 1
+    const { data: prev } = await supabase.from('settlement_records').select('operating_profit,total_payroll,total_expenses,final_profit').eq('year', prevY).eq('month', prevM).maybeSingle()
+    setPrevRecord(prev || null)
+
+    // 월별 추이 (저장된 전체 레코드)
+    const { data: trend } = await supabase.from('settlement_records').select('year,month,final_profit,operating_profit').order('year').order('month')
+    setMonthlyTrend((trend || []).map(r => ({ label: `${r.year}-${String(r.month).padStart(2,'0')}`, final_profit: r.final_profit, operating_profit: r.operating_profit })))
 
     const { data: record } = await supabase
       .from('settlement_records').select('*').eq('year', y).eq('month', m).maybeSingle()
@@ -367,26 +384,25 @@ export default function SettlementPage() {
 
             {/* ─── 항상 표시: KPI ─── */}
             <section className="kpi-row">
-              <div className="kpi-card">
-                <div className="kpi-label">총 영업이익</div>
-                <div className={`kpi-value ${operatingProfit < 0 ? 'negative' : ''}`}>{fmt(operatingProfit)}</div>
-                <div className="kpi-sub">손익 대시보드 기준</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-label">영업팀 총 급여</div>
-                <div className="kpi-value">{fmt(totalPayroll)}</div>
-                <div className="kpi-sub">{isSimple ? '영업팀 + 정규직' : employees.length > 0 ? `${employees.length}명` : '데이터 없음'}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-label">총 지출</div>
-                <div className="kpi-value">{fmt(expenses.total)}</div>
-                <div className="kpi-sub">고정 + 유동</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-label">최종 이익</div>
-                <div className={`kpi-value ${finalProfit < 0 ? 'negative' : finalProfit > 0 ? 'positive' : ''}`}>{fmt(finalProfit)}</div>
-                <div className="kpi-sub">영업이익 - 급여 - 지출</div>
-              </div>
+              {[
+                { label: '총 영업이익', cur: operatingProfit, prev: prevRecord?.operating_profit, sub: '손익 대시보드 기준', colored: false },
+                { label: '영업팀 총 급여', cur: totalPayroll, prev: prevRecord?.total_payroll, sub: isSimple ? '영업팀 + 정규직' : employees.length > 0 ? `${employees.length}명` : '데이터 없음', colored: false },
+                { label: '총 지출', cur: expenses.total, prev: prevRecord?.total_expenses, sub: '고정 + 유동', colored: false },
+                { label: '최종 이익', cur: finalProfit, prev: prevRecord?.final_profit, sub: '영업이익 - 급여 - 지출', colored: true },
+              ].map(({ label, cur, prev, sub, colored }) => {
+                const chg = prev !== undefined && prev !== null && prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null
+                return (
+                  <div className="kpi-card" key={label}>
+                    <div className="kpi-label">{label}</div>
+                    <div className={`kpi-value ${colored && cur < 0 ? 'negative' : colored && cur > 0 ? 'positive' : ''}`}>{fmt(cur)}</div>
+                    {chg !== null ? (
+                      <div style={{ fontSize: 12, marginTop: 6, color: chg >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                        {chg >= 0 ? '▲' : '▼'} {Math.abs(chg).toFixed(1)}% vs 전월
+                      </div>
+                    ) : <div className="kpi-sub">{sub}</div>}
+                  </div>
+                )
+              })}
             </section>
 
             {/* ─── 항상 표시: 비율 KPI ─── */}
@@ -582,6 +598,70 @@ export default function SettlementPage() {
                 </div>
               </div>
             </div>
+            {/* ─── 최종 이익 구성 차트 (워터폴) ─── */}
+            {(() => {
+              const salesTeamNet = isSimple ? (employees.find(e => e.name === '영업팀 급여')?.net || 0) : totalPayroll
+              const regularNet = isSimple ? (employees.find(e => e.name === '정규직 급여')?.net || 0) : 0
+              const waterfallData = [
+                { name: '영업이익', value: operatingProfit, color: '#7c3aed' },
+                ...(isSimple
+                  ? [
+                    { name: '영업팀급여', value: -salesTeamNet, color: '#ef4444' },
+                    { name: '정규직급여', value: -regularNet, color: '#f97316' },
+                  ]
+                  : [{ name: '영업팀급여', value: -totalPayroll, color: '#ef4444' }]
+                ),
+                { name: '총지출', value: -expenses.total, color: '#f59e0b' },
+                { name: '최종이익', value: finalProfit, color: finalProfit >= 0 ? '#16a34a' : '#dc2626' },
+              ]
+              return (
+                <div className="card">
+                  <h3 style={{ marginBottom: 20 }}>최종 이익 구성</h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={waterfallData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={v => { const n = Math.abs(Number(v)); return n >= 1000000 ? (n/1000000).toFixed(0)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : String(n) }} tick={{ fontSize: 11 }} width={60} />
+                      <Tooltip formatter={(v: unknown) => [fmt(Math.abs(Number(v))) + '원', '']} />
+                      <Bar dataKey="value" radius={[4,4,0,0]}>
+                        {waterfallData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div style={{ display:'flex', gap:16, justifyContent:'center', marginTop:12, fontSize:12, flexWrap:'wrap' }}>
+                    <span style={{ color:'#7c3aed' }}>■ 영업이익</span>
+                    <span style={{ color:'#ef4444' }}>■ 급여</span>
+                    {isSimple && <span style={{ color:'#f97316' }}>■ 정규직급여</span>}
+                    <span style={{ color:'#f59e0b' }}>■ 지출</span>
+                    <span style={{ color: finalProfit >= 0 ? '#16a34a' : '#dc2626' }}>■ 최종이익</span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* ─── 월별 최종 이익 추이 ─── */}
+            {monthlyTrend.length > 0 && (
+              <div className="card">
+                <h3 style={{ marginBottom: 20 }}>월별 최종 이익 추이</h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={monthlyTrend} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={v => { const n = Math.abs(Number(v)); return n >= 1000000 ? (n/1000000).toFixed(0)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : String(n) }} tick={{ fontSize: 11 }} width={60} />
+                    <Tooltip formatter={(v: unknown) => [fmt(Number(v)) + '원', '']} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="operating_profit" name="영업이익" stroke="#7c3aed" strokeWidth={2} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="final_profit" name="최종이익" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            {monthlyTrend.length === 0 && (
+              <div className="card" style={{ textAlign:'center', color:'var(--text-muted)', padding:'40px 0' }}>
+                월별 추이 차트는 정산 데이터가 저장되면 자동으로 표시됩니다.
+              </div>
+            )}
+
           </>)}
         </main>
       </div>
