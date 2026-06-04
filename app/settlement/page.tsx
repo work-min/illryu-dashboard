@@ -7,13 +7,13 @@ interface Employee { name: string; net: number; note: string }
 interface Expenses { fixed: number; variable: number; total: number }
 
 const CSS = `
-  :root { --bg:#f8f7ff;--surface:#fff;--border:#e8e4f3;--text:#1a1523;--text-muted:#6b7280;--primary:#7c3aed;--hover-bg:#f3f0ff;--danger:#dc2626;--success:#16a34a; }
-  .dark { --bg:#0f0d1a;--surface:#1a1727;--border:#2d2640;--text:#f0eeff;--text-muted:#9ca3af;--hover-bg:#252035; }
+  :root{--bg:#f8f7ff;--surface:#fff;--border:#e8e4f3;--text:#1a1523;--text-muted:#6b7280;--primary:#7c3aed;--hover-bg:#f3f0ff;--danger:#dc2626;--success:#16a34a}
+  .dark{--bg:#0f0d1a;--surface:#1a1727;--border:#2d2640;--text:#f0eeff;--text-muted:#9ca3af;--hover-bg:#252035}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Pretendard','Apple SD Gothic Neo',sans-serif}
   .wrap{min-height:100vh;background:var(--bg)}
   .app-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-  .header-logo{display:flex;align-items:center;gap:8px;cursor:pointer;flex-direction:column;align-items:flex-start;gap:2px}
+  .header-logo{display:flex;flex-direction:column;gap:2px;cursor:pointer}
   .subtitle{font-size:12px;color:var(--text-muted)}
   .header-right{display:flex;align-items:center;gap:8px}
   .nav-tab{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);text-decoration:none}
@@ -49,20 +49,21 @@ const CSS = `
   .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-left:8px}
   .badge-fixed{background:#ede9fe;color:#7c3aed}
   .badge-variable{background:#fef3c7;color:#b45309}
-  .badge-live{background:#dcfce7;color:#16a34a}
-  .badge-saved{background:#dbeafe;color:#1d4ed8}
+  .badge-live{background:#fef9c3;color:#a16207;padding:4px 12px;border-radius:20px;font-size:12px}
+  .badge-saved{background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:20px;font-size:12px}
   .divider{height:1px;background:var(--border);margin:4px 0}
-  .btn{padding:8px 16px;border-radius:6px;border:1px solid transparent;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn{padding:8px 16px;border-radius:6px;border:1px solid transparent;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;height:36px}
   .btn-primary{background:var(--primary);color:white}
   .btn-primary:disabled{opacity:.5;cursor:not-allowed}
   .btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border)}
   .btn-secondary:hover{background:var(--hover-bg)}
-  .btn-sm{padding:5px 12px;font-size:12px}
-  .edit-input{width:100%;border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:13px;background:var(--bg);color:var(--text);text-align:right}
-  .edit-input:focus{outline:none;border-color:var(--primary)}
+  .btn-sm{padding:5px 12px;font-size:12px;height:30px}
+  .btn-danger-outline{background:transparent;color:var(--danger);border-color:var(--danger)}
+  .edit-input{border:1px solid var(--primary);border-radius:4px;padding:4px 8px;font-size:13px;background:var(--bg);color:var(--text);text-align:right;width:130px;outline:none}
   select{border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--surface);color:var(--text);cursor:pointer}
-  .filter-bar{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px}
-  .status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+  .filter-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px}
+  .edit-banner{background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .dark .edit-banner{background:#1e3a5f;border-color:#3b82f6}
   @media(max-width:900px){.kpi-row,.ratio-row{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
 `
 
@@ -73,19 +74,16 @@ export default function SettlementPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  // 년/월 선택
   const [year, setYear] = useState(0)
   const [month, setMonth] = useState(0)
-
-  // 데이터
   const [operatingProfit, setOperatingProfit] = useState(0)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [expenses, setExpenses] = useState<Expenses>({ fixed: 0, variable: 0, total: 0 })
-  const [isSaved, setIsSaved] = useState(false)   // DB에 저장된 데이터인지
+  const [isSaved, setIsSaved] = useState(false)
   const [editMode, setEditMode] = useState(false)
 
-  // 수정용 임시 상태
-  const [editEmployees, setEditEmployees] = useState<Employee[]>([])
+  // 수정 임시 상태
+  const [editEmps, setEditEmps] = useState<Employee[]>([])
   const [editFixed, setEditFixed] = useState(0)
   const [editVariable, setEditVariable] = useState(0)
   const [editRegularTotal, setEditRegularTotal] = useState(0)
@@ -95,52 +93,38 @@ export default function SettlementPage() {
   const fmtRate = (n: number) => isFinite(n) && n !== 0 ? n.toFixed(1) + '%' : '-'
   const parseNum = (s: string) => { const n = parseFloat(s.replace(/,/g, '')); return isNaN(n) ? 0 : n }
 
-  const individualEmployees = employees.filter(e => e.note !== '사대보험')
-  const regularEmployees = employees.filter(e => e.note === '사대보험')
-  const regularTotal = regularEmployees.reduce((s, e) => s + e.net, 0)
+  const individualEmps = employees.filter(e => e.note !== '사대보험')
+  const regularEmps = employees.filter(e => e.note === '사대보험')
+  const regularTotal = regularEmps.reduce((s, e) => s + e.net, 0)
   const totalPayroll = employees.reduce((s, e) => s + e.net, 0)
   const finalProfit = operatingProfit - totalPayroll - expenses.total
   const payrollRate = operatingProfit > 0 ? (totalPayroll / operatingProfit) * 100 : 0
   const expenseRate = operatingProfit > 0 ? (expenses.total / operatingProfit) * 100 : 0
   const finalRate = operatingProfit > 0 ? (finalProfit / operatingProfit) * 100 : 0
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+  async function handleLogout() { await supabase.auth.signOut(); router.push('/login') }
 
   const loadData = useCallback(async (y: number, m: number) => {
-    setLoading(true)
-    setEditMode(false)
+    setLoading(true); setEditMode(false)
 
-    // 영업이익: transactions DB에서
-    const { data: txData } = await supabase
-      .from('transactions')
-      .select('profit')
-      .eq('year', y).eq('month', m)
-    const op = txData ? txData.reduce((s, t) => s + (t.profit || 0), 0) : 0
-    setOperatingProfit(op)
+    // 영업이익: transactions에서 직접 (client-side, 인증된 세션)
+    const { data: txData } = await supabase.from('transactions').select('profit').eq('year', y).eq('month', m)
+    setOperatingProfit(txData ? txData.reduce((s, t) => s + (t.profit || 0), 0) : 0)
 
-    // DB에 저장된 정산 데이터 확인
-    const res = await fetch(`/api/settlement-record?year=${y}&month=${m}`)
-    const { record } = await res.json()
+    // DB 정산 레코드 조회 (client-side supabase — 인증 세션 자동 포함)
+    const { data: record } = await supabase
+      .from('settlement_records').select('*').eq('year', y).eq('month', m).maybeSingle()
 
     if (record) {
-      // DB 데이터 사용
       setEmployees(record.employees || [])
       setExpenses({ fixed: record.fixed_expenses, variable: record.variable_expenses, total: record.total_expenses })
       setIsSaved(true)
     } else {
-      // 구글 시트에서 실시간 로드 (당월만)
-      const sheetRes = await fetch('/api/settlement')
-      const sheetJson = await sheetRes.json()
-      if (!sheetJson.error) {
-        setEmployees(sheetJson.employees || [])
-        setExpenses(sheetJson.expenses || { fixed: 0, variable: 0, total: 0 })
-      } else {
-        setEmployees([])
-        setExpenses({ fixed: 0, variable: 0, total: 0 })
-      }
+      // 미저장: 구글 시트 실시간 로드
+      const res = await fetch('/api/settlement')
+      const json = await res.json()
+      setEmployees(!json.error ? json.employees || [] : [])
+      setExpenses(!json.error ? json.expenses || { fixed: 0, variable: 0, total: 0 } : { fixed: 0, variable: 0, total: 0 })
       setIsSaved(false)
     }
     setLoading(false)
@@ -153,8 +137,7 @@ export default function SettlementPage() {
       setUserEmail(session.user.email || '')
       const now = new Date()
       const kst = new Date(now.getTime() + (9 * 60 - now.getTimezoneOffset()) * 60000)
-      const y = kst.getFullYear()
-      const m = kst.getMonth() + 1
+      const y = kst.getFullYear(), m = kst.getMonth() + 1
       setYear(y); setMonth(m)
       await loadData(y, m)
     }
@@ -164,7 +147,7 @@ export default function SettlementPage() {
   async function handleSave() {
     if (!confirm(`${year}년 ${month}월 정산 데이터를 저장하시겠습니까?`)) return
     setSaving(true)
-    const body = {
+    const { error } = await supabase.from('settlement_records').upsert({
       year, month,
       operating_profit: operatingProfit,
       total_payroll: totalPayroll,
@@ -173,16 +156,14 @@ export default function SettlementPage() {
       variable_expenses: expenses.variable,
       final_profit: finalProfit,
       employees,
-    }
-    const res = await fetch('/api/settlement-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const json = await res.json()
-    if (json.error) { alert('저장 실패: ' + json.error) }
+    }, { onConflict: 'year,month' })
+    if (error) alert('저장 실패: ' + error.message)
     else { alert('✅ 저장 완료!'); setIsSaved(true) }
     setSaving(false)
   }
 
   function startEdit() {
-    setEditEmployees(employees.map(e => ({ ...e })))
+    setEditEmps(employees.map(e => ({ ...e })))
     setEditFixed(expenses.fixed)
     setEditVariable(expenses.variable)
     setEditRegularTotal(regularTotal)
@@ -190,52 +171,46 @@ export default function SettlementPage() {
   }
 
   async function handleSaveEdit() {
-    // 수정된 직원 데이터 반영
-    const newEmployees: Employee[] = employees.map(e => {
-      if (e.note === '사대보험') return e // 정규직은 개별 수정 불가 (합산으로만)
-      const found = editEmployees.find(ee => ee.name === e.name)
+    // 개별 영업자 수정 반영
+    const newEmps: Employee[] = employees.map(e => {
+      if (e.note === '사대보험') return e
+      const found = editEmps.find(ee => ee.name === e.name)
       return found ? { ...e, net: found.net } : e
     })
-    // 정규직 합산 금액 배분: 인원수로 균등 배분
-    const regularCount = regularEmployees.length
-    if (regularCount > 0) {
-      const perPerson = Math.round(editRegularTotal / regularCount)
+    // 정규직: 합산 금액을 인원수로 균등 배분
+    if (regularEmps.length > 0) {
+      const per = Math.round(editRegularTotal / regularEmps.length)
       let remain = editRegularTotal
-      newEmployees.forEach((e, i) => {
+      let regularIdx = 0
+      newEmps.forEach((e, i) => {
         if (e.note === '사대보험') {
-          const isLast = newEmployees.filter(ee => ee.note === '사대보험').slice(-1)[0]?.name === e.name
-          newEmployees[i] = { ...e, net: isLast ? remain : perPerson }
-          if (!isLast) remain -= perPerson
+          regularIdx++
+          const isLast = regularIdx === regularEmps.length
+          newEmps[i] = { ...e, net: isLast ? remain : per }
+          if (!isLast) remain -= per
         }
       })
     }
-    const newExpenses = { fixed: editFixed, variable: editVariable, total: editFixed + editVariable }
-    const newTotalPayroll = newEmployees.reduce((s, e) => s + e.net, 0)
-    const newFinalProfit = operatingProfit - newTotalPayroll - newExpenses.total
+    const newExp = { fixed: editFixed, variable: editVariable, total: editFixed + editVariable }
+    const newPayroll = newEmps.reduce((s, e) => s + e.net, 0)
+    const newFinal = operatingProfit - newPayroll - newExp.total
 
     setSaving(true)
-    const body = {
-      year, month,
-      total_payroll: newTotalPayroll,
-      total_expenses: newExpenses.total,
-      fixed_expenses: newExpenses.fixed,
-      variable_expenses: newExpenses.variable,
-      final_profit: newFinalProfit,
-      employees: newEmployees,
-    }
-    const res = await fetch('/api/settlement-record', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const json = await res.json()
-    if (json.error) { alert('수정 실패: ' + json.error) }
-    else {
-      setEmployees(newEmployees)
-      setExpenses(newExpenses)
-      setEditMode(false)
-    }
+    const { error } = await supabase.from('settlement_records').update({
+      total_payroll: newPayroll,
+      total_expenses: newExp.total,
+      fixed_expenses: newExp.fixed,
+      variable_expenses: newExp.variable,
+      final_profit: newFinal,
+      employees: newEmps,
+    }).eq('year', year).eq('month', month)
+
+    if (error) { alert('수정 실패: ' + error.message) }
+    else { setEmployees(newEmps); setExpenses(newExp); setEditMode(false) }
     setSaving(false)
   }
 
   const years = Array.from({ length: new Date().getFullYear() - 2023 }, (_, i) => 2024 + i)
-  const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
   return (
     <div className={dark ? 'dark' : ''}>
@@ -260,36 +235,38 @@ export default function SettlementPage() {
         </header>
 
         <main className="main">
-          {/* 필터 + 저장 버튼 */}
+          {/* 필터 바 */}
           <div className="filter-bar">
             <span style={{ fontSize: 14, fontWeight: 600 }}>조회 기간</span>
             <select value={year} onChange={e => { const y = +e.target.value; setYear(y); loadData(y, month) }}>
               {years.map(y => <option key={y} value={y}>{y}년</option>)}
             </select>
             <select value={month} onChange={e => { const m = +e.target.value; setMonth(m); loadData(year, m) }}>
-              {months.map(m => <option key={m} value={m}>{m}월</option>)}
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
             </select>
-            <span className={`status-badge ${isSaved ? 'badge-saved' : 'badge-live'}`}>
+            <span className={isSaved ? 'badge-saved' : 'badge-live'}>
               {isSaved ? '💾 저장된 데이터' : '🔴 실시간 (미저장)'}
             </span>
             <div style={{ flex: 1 }} />
-            {!isSaved && !editMode && (
+            {!isSaved && !loading && (
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? '저장 중...' : '💾 이번 달 정산 저장'}
               </button>
             )}
-            {isSaved && !editMode && (
-              <button className="btn btn-secondary" onClick={startEdit}>✏️ 수정</button>
-            )}
-            {editMode && (
-              <>
-                <button className="btn btn-secondary" onClick={() => setEditMode(false)}>취소</button>
-                <button className="btn btn-primary" onClick={handleSaveEdit} disabled={saving}>
-                  {saving ? '저장 중...' : '저장'}
-                </button>
-              </>
-            )}
           </div>
+
+          {/* 수정 모드 배너 */}
+          {editMode && (
+            <div className="edit-banner">
+              <span style={{ fontSize: 14, fontWeight: 600 }}>✏️ 수정 모드 — 급여/지출 금액을 직접 입력 후 저장하세요.</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setEditMode(false)}>취소</button>
+                <button className="btn btn-primary btn-sm" onClick={handleSaveEdit} disabled={saving}>
+                  {saving ? '저장 중...' : '저장 완료'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>로딩 중...</div>
@@ -339,26 +316,27 @@ export default function SettlementPage() {
 
             {/* 급여 + 지출 */}
             <div className="two-col">
+              {/* 급여 */}
               <div className="card">
                 <div className="card-header">
                   <h3>영업자별 급여 현황</h3>
-                  {editMode && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>금액 직접 수정 가능</span>}
+                  {isSaved && !editMode && (
+                    <button className="btn btn-secondary btn-sm" onClick={startEdit}>✏️ 수정</button>
+                  )}
                 </div>
                 <table>
                   <thead>
                     <tr><th>이름</th><th className="amount">지급액(세후)</th></tr>
                   </thead>
                   <tbody>
-                    {individualEmployees.map((e, i) => (
+                    {individualEmps.map((e, i) => (
                       <tr key={i}>
                         <td>{e.name}</td>
                         <td className="amount">
-                          {editMode ? (
-                            <input className="edit-input" style={{ width: 120 }}
-                              defaultValue={e.net}
-                              onChange={ev => setEditEmployees(prev => prev.map(ee => ee.name === e.name ? { ...ee, net: parseNum(ev.target.value) } : ee))}
-                            />
-                          ) : (e.net ? fmt(e.net) : '-')}
+                          {editMode
+                            ? <input className="edit-input" defaultValue={e.net}
+                                onChange={ev => setEditEmps(prev => prev.map(ee => ee.name === e.name ? { ...ee, net: parseNum(ev.target.value) } : ee))} />
+                            : (e.net ? fmt(e.net) : '-')}
                         </td>
                       </tr>
                     ))}
@@ -366,12 +344,10 @@ export default function SettlementPage() {
                       <tr>
                         <td style={{ color: 'var(--text-muted)' }}>정규직 급여</td>
                         <td className="amount">
-                          {editMode ? (
-                            <input className="edit-input" style={{ width: 120 }}
-                              defaultValue={editRegularTotal || regularTotal}
-                              onChange={ev => setEditRegularTotal(parseNum(ev.target.value))}
-                            />
-                          ) : fmt(regularTotal)}
+                          {editMode
+                            ? <input className="edit-input" defaultValue={editRegularTotal || regularTotal}
+                                onChange={ev => setEditRegularTotal(parseNum(ev.target.value))} />
+                            : fmt(regularTotal)}
                         </td>
                       </tr>
                     )}
@@ -387,28 +363,27 @@ export default function SettlementPage() {
                 </table>
               </div>
 
+              {/* 지출 */}
               <div className="card">
                 <div className="card-header">
                   <h3>지출 현황</h3>
-                  {editMode && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>금액 직접 수정 가능</span>}
+                  {isSaved && !editMode && (
+                    <button className="btn btn-secondary btn-sm" onClick={startEdit}>✏️ 수정</button>
+                  )}
                 </div>
                 <div className="expense-row">
                   <div><span className="expense-label">고정 지출</span><span className="badge badge-fixed">고정</span></div>
-                  {editMode ? (
-                    <input className="edit-input" style={{ width: 140 }}
-                      defaultValue={editFixed}
-                      onChange={ev => setEditFixed(parseNum(ev.target.value))}
-                    />
-                  ) : <div className="expense-amount">{fmt(expenses.fixed)}</div>}
+                  {editMode
+                    ? <input className="edit-input" defaultValue={editFixed}
+                        onChange={ev => setEditFixed(parseNum(ev.target.value))} />
+                    : <div className="expense-amount">{fmt(expenses.fixed)}</div>}
                 </div>
                 <div className="expense-row">
                   <div><span className="expense-label">유동 지출</span><span className="badge badge-variable">유동</span></div>
-                  {editMode ? (
-                    <input className="edit-input" style={{ width: 140 }}
-                      defaultValue={editVariable}
-                      onChange={ev => setEditVariable(parseNum(ev.target.value))}
-                    />
-                  ) : <div className="expense-amount">{fmt(expenses.variable)}</div>}
+                  {editMode
+                    ? <input className="edit-input" defaultValue={editVariable}
+                        onChange={ev => setEditVariable(parseNum(ev.target.value))} />
+                    : <div className="expense-amount">{fmt(expenses.variable)}</div>}
                 </div>
                 <div className="divider" />
                 <div className="expense-row">
