@@ -72,7 +72,10 @@ export default function SettlementPage() {
     init()
   }, [])
 
-  const totalPayroll = employees.reduce((s, e) => s + e.net + e.extra + e.cash, 0)
+  const individualEmployees = employees.filter(e => e.note !== '사대보험')
+  const regularEmployees = employees.filter(e => e.note === '사대보험')
+  const regularTotal = regularEmployees.reduce((s, e) => s + e.net, 0)
+  const totalPayroll = employees.reduce((s, e) => s + e.net, 0)
   const finalProfit = operatingProfit - totalPayroll - expenses.total
 
   if (loading) return (
@@ -210,32 +213,29 @@ export default function SettlementPage() {
                   <tr>
                     <th>이름</th>
                     <th className="amount">지급액(세후)</th>
-                    <th className="amount">기타지급</th>
-                    <th className="amount">현금이체</th>
-                    <th className="amount">합계</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((e, i) => (
+                  {individualEmployees.map((e, i) => (
                     <tr key={i}>
-                      <td>{e.name}{e.note ? <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>({e.note})</span> : ''}</td>
+                      <td>{e.name}</td>
                       <td className="amount">{e.net ? fmt(e.net) : '-'}</td>
-                      <td className="amount">{e.extra ? fmt(e.extra) : '-'}</td>
-                      <td className="amount">{e.cash ? fmt(e.cash) : '-'}</td>
-                      <td className="amount">{fmt(e.net + e.extra + e.cash)}</td>
                     </tr>
                   ))}
+                  {regularTotal > 0 && (
+                    <tr>
+                      <td style={{ color: 'var(--text-muted)' }}>정규직 급여</td>
+                      <td className="amount">{fmt(regularTotal)}</td>
+                    </tr>
+                  )}
                   {employees.length === 0 && (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>데이터 없음</td></tr>
+                    <tr><td colSpan={2} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>데이터 없음</td></tr>
                   )}
                 </tbody>
                 {employees.length > 0 && (
                   <tfoot>
                     <tr className="total-row">
                       <td>합계</td>
-                      <td className="amount">{fmt(employees.reduce((s, e) => s + e.net, 0))}</td>
-                      <td className="amount">{fmt(employees.reduce((s, e) => s + e.extra, 0))}</td>
-                      <td className="amount">{fmt(employees.reduce((s, e) => s + e.cash, 0))}</td>
                       <td className="amount">{fmt(totalPayroll)}</td>
                     </tr>
                   </tfoot>
