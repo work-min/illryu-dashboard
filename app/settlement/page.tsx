@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 interface Employee {
   name: string
@@ -20,7 +20,7 @@ interface Expenses {
 
 export default function SettlementPage() {
   const router = useRouter()
-  const supabase = createClient()
+
 
   const [dark, setDark] = useState(false)
   const [userEmail, setUserEmail] = useState('')
