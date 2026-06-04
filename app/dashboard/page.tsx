@@ -802,9 +802,9 @@ export default function DashboardPage() {
         {/* Header */}
         <header className="app-header">
           <div>
-            <h1>📊 일류 손익 보고 대시보드</h1>
+            <h1 style={{cursor:'pointer'}} onClick={() => window.location.href = '/dashboard'}>illryu</h1>
             <p className="subtitle">
-              일류기획 | 주차별 손익 현황&nbsp;
+              손익 보고 대시보드&nbsp;
               {currentRows.some(t => !t.is_closed)
                 ? <span className="data-status" style={{ background: '#fef3c7', color: '#b45309' }}>📝 임시저장 {currentRows.length.toLocaleString()}건</span>
                 : <span className="data-status">⚡ {currentRows.length.toLocaleString()}건 로드됨</span>
