@@ -802,7 +802,7 @@ export default function DashboardPage() {
         {/* Header */}
         <header className="app-header">
           <div>
-            <h1 style={{cursor:'pointer'}} onClick={() => window.location.href = '/dashboard'}>illryu</h1>
+            <img src="/logo.png" alt="illryu" style={{height:'48px',cursor:'pointer',objectFit:'contain'}} onClick={() => window.location.href = '/dashboard'} />
             <p className="subtitle">
               손익 보고 대시보드&nbsp;
               {currentRows.some(t => !t.is_closed)
