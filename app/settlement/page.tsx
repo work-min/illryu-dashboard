@@ -598,47 +598,6 @@ export default function SettlementPage() {
                 </div>
               </div>
             </div>
-            {/* ─── 최종 이익 구성 차트 (워터폴) ─── */}
-            {(() => {
-              const salesTeamNet = isSimple ? (employees.find(e => e.name === '영업팀 급여')?.net || 0) : totalPayroll
-              const regularNet = isSimple ? (employees.find(e => e.name === '정규직 급여')?.net || 0) : 0
-              const waterfallData = [
-                { name: '영업이익', value: operatingProfit, color: '#7c3aed' },
-                ...(isSimple
-                  ? [
-                    { name: '영업팀급여', value: -salesTeamNet, color: '#ef4444' },
-                    { name: '정규직급여', value: -regularNet, color: '#f97316' },
-                  ]
-                  : [{ name: '영업팀급여', value: -totalPayroll, color: '#ef4444' }]
-                ),
-                { name: '총지출', value: -expenses.total, color: '#f59e0b' },
-                { name: '최종이익', value: finalProfit, color: finalProfit >= 0 ? '#16a34a' : '#dc2626' },
-              ]
-              return (
-                <div className="card">
-                  <h3 style={{ marginBottom: 20 }}>최종 이익 구성</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={waterfallData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tickFormatter={v => { const n = Math.abs(Number(v)); return n >= 1000000 ? (n/1000000).toFixed(0)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : String(n) }} tick={{ fontSize: 11 }} width={60} />
-                      <Tooltip formatter={(v: unknown) => [fmt(Math.abs(Number(v))) + '원', '']} />
-                      <Bar dataKey="value" radius={[4,4,0,0]}>
-                        {waterfallData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <div style={{ display:'flex', gap:16, justifyContent:'center', marginTop:12, fontSize:12, flexWrap:'wrap' }}>
-                    <span style={{ color:'#7c3aed' }}>■ 영업이익</span>
-                    <span style={{ color:'#ef4444' }}>■ 급여</span>
-                    {isSimple && <span style={{ color:'#f97316' }}>■ 정규직급여</span>}
-                    <span style={{ color:'#f59e0b' }}>■ 지출</span>
-                    <span style={{ color: finalProfit >= 0 ? '#16a34a' : '#dc2626' }}>■ 최종이익</span>
-                  </div>
-                </div>
-              )
-            })()}
-
             {/* ─── 월별 최종 이익 추이 ─── */}
             {monthlyTrend.length > 0 && (
               <div className="card">
