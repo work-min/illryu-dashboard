@@ -873,17 +873,17 @@ export default function DashboardPage() {
           {/* KPI */}
           <section className="kpi-row">
             <div className="kpi-card">
-              <div className="kpi-label">매출 합계</div>
+              <div className="kpi-label">총 매출</div>
               <div className="kpi-value">{fmt(kpi.sales)}</div>
               <div className="kpi-change">{showChange(kpi.sales, prevKpi.sales, true)}</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-label">매입 합계</div>
+              <div className="kpi-label">총 매입</div>
               <div className="kpi-value">{fmt(kpi.purchase)}</div>
               <div className="kpi-change">{showChange(kpi.purchase, prevKpi.purchase, false)}</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-label">순익 합계</div>
+              <div className="kpi-label">영업 이익</div>
               <div className={`kpi-value ${kpi.profit < 0 ? 'negative' : ''}`}>{fmt(kpi.profit)}</div>
               <div className="kpi-change">{showChange(kpi.profit, prevKpi.profit, true)}</div>
             </div>
