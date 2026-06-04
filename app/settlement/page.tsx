@@ -107,11 +107,11 @@ export default function SettlementPage() {
   const loadData = useCallback(async (y: number, m: number) => {
     setLoading(true); setEditMode(false)
 
-    // 영업이익: transactions에서 직접 (client-side, 인증된 세션)
+    // 영업이익: transactions에서 직접
     const { data: txData } = await supabase.from('transactions').select('profit').eq('year', y).eq('month', m)
     setOperatingProfit(txData ? txData.reduce((s, t) => s + (t.profit || 0), 0) : 0)
 
-    // DB 정산 레코드 조회 (client-side supabase — 인증 세션 자동 포함)
+    // DB 정산 레코드 조회
     const { data: record } = await supabase
       .from('settlement_records').select('*').eq('year', y).eq('month', m).maybeSingle()
 
@@ -120,11 +120,19 @@ export default function SettlementPage() {
       setExpenses({ fixed: record.fixed_expenses, variable: record.variable_expenses, total: record.total_expenses })
       setIsSaved(true)
     } else {
-      // 미저장: 구글 시트 실시간 로드
-      const res = await fetch('/api/settlement')
-      const json = await res.json()
-      setEmployees(!json.error ? json.employees || [] : [])
-      setExpenses(!json.error ? json.expenses || { fixed: 0, variable: 0, total: 0 } : { fixed: 0, variable: 0, total: 0 })
+      // 당월만 구글 시트 실시간 로드, 과거 월은 데이터 없음
+      const now = new Date()
+      const kst = new Date(now.getTime() + (9 * 60 - now.getTimezoneOffset()) * 60000)
+      const isCurrentMonth = y === kst.getFullYear() && m === kst.getMonth() + 1
+      if (isCurrentMonth) {
+        const res = await fetch('/api/settlement')
+        const json = await res.json()
+        setEmployees(!json.error ? json.employees || [] : [])
+        setExpenses(!json.error ? json.expenses || { fixed: 0, variable: 0, total: 0 } : { fixed: 0, variable: 0, total: 0 })
+      } else {
+        setEmployees([])
+        setExpenses({ fixed: 0, variable: 0, total: 0 })
+      }
       setIsSaved(false)
     }
     setLoading(false)
