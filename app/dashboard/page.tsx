@@ -894,26 +894,6 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* 주차별 순익 */}
-          <section className="card">
-            <h3>주차별 순익</h3>
-            <div className="chart-wrap">
-              {weeklyData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={weeklyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={v => fmt(Number(v))} tick={{ fontSize: 11 }} width={80} />
-                    <Tooltip formatter={(v) => fmtKRW(Number(v))} />
-                    <Bar dataKey="profit" name="순익" radius={[4, 4, 0, 0]}>
-                      {weeklyData.map((entry, i) => <Cell key={i} fill={entry.profit >= 0 ? '#7c3aed' : '#dc2626'} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <p style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 60 }}>데이터 없음</p>}
-            </div>
-          </section>
-
           {/* 업체별 + 일자별 */}
           <section className="chart-row">
             <div className="card chart-card">
@@ -955,6 +935,26 @@ export default function DashboardPage() {
                   </ResponsiveContainer>
                 ) : <p style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 60 }}>데이터 없음</p>}
               </div>
+            </div>
+          </section>
+
+          {/* 주차별 순익 */}
+          <section className="card">
+            <h3>주차별 순익</h3>
+            <div className="chart-wrap">
+              {weeklyData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weeklyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={v => fmt(Number(v))} tick={{ fontSize: 11 }} width={80} />
+                    <Tooltip formatter={(v) => fmtKRW(Number(v))} />
+                    <Bar dataKey="profit" name="순익" radius={[4, 4, 0, 0]}>
+                      {weeklyData.map((entry, i) => <Cell key={i} fill={entry.profit >= 0 ? '#7c3aed' : '#dc2626'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 60 }}>데이터 없음</p>}
             </div>
           </section>
 
