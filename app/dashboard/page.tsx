@@ -906,7 +906,7 @@ export default function DashboardPage() {
                 <h3>업체별 순익 (상위 15개)</h3>
                 <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(true)}>📋 전체 보기</button>
               </div>
-              <div className="chart-wrap">
+              <div className="chart-wrap" style={{ height: 460 }}>
                 {companyData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={companyData.slice(0, 15)} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
