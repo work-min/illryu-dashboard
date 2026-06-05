@@ -54,7 +54,7 @@ export async function GET() {
   try {
     const token = await getAccessToken()
     // 미수금합 탭 전체를 넓게 읽음 (A:BZ)
-    const rows = await fetchSheet(token, '미수금합!A:BZ')
+    const rows = await fetchSheet(token, '미수현황!A:BZ')
 
     if (rows.length < 3) {
       return NextResponse.json({ receivables: [], payables: [], debug: { rows } })
