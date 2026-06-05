@@ -20,7 +20,8 @@ const parseAmt = (s: string) => { const n = parseFloat(s.replace(/,/g, '')); ret
 const uid = () => Math.random().toString(36).slice(2)
 const todayKST = () => {
   const now = new Date()
-  const kst = new Date(now.getTime() + (9 * 60 - now.getTimezoneOffset()) * 60000)
+  // getTime()은 항상 UTC 기준이므로 9시간 고정으로 더하면 항상 정확한 KST 날짜
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
   return kst.toISOString().slice(0, 10)
 }
 
