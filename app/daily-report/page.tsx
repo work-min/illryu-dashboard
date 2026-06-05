@@ -198,14 +198,16 @@ export default function DailyReportPage() {
   }, [router])
 
   const loadSaved = useCallback(async (d: string) => {
-    const res = await fetch(`/api/daily-report?date=${d}`)
-    const json = await res.json()
-    if (json.report) {
-      const r = json.report
-      setTransfers((r.transfers || []).map((t: Record<string, unknown>) => ({ ...t, id: uid(), amount: String(t.amount ?? '') })))
-      setReceivables(r.receivables || [])
-      setPayables(r.payables || [])
-      setNotes(r.notes || '')
+    const { data } = await supabase
+      .from('daily_reports')
+      .select('*')
+      .eq('date', d)
+      .maybeSingle()
+    if (data) {
+      setTransfers((data.transfers || []).map((t: Record<string, unknown>) => ({ ...t, id: uid(), amount: String(t.amount ?? '') })))
+      setReceivables(data.receivables || [])
+      setPayables(data.payables || [])
+      setNotes(data.notes || '')
     } else {
       setTransfers([]); setReceivables([]); setPayables([]); setNotes('')
     }
@@ -232,15 +234,20 @@ export default function DailyReportPage() {
 
   async function handleSave() {
     setSaving(true); setSaveStatus('')
-    const body = {
-      date,
-      transfers: transfers.map(({ id: _id, ...rest }) => ({ ...rest, amount: parseAmt(rest.amount) })),
-      receivables, payables, notes,
-    }
-    const res = await fetch('/api/daily-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const json = await res.json()
+    const { error } = await supabase
+      .from('daily_reports')
+      .upsert(
+        {
+          date,
+          transfers: transfers.map(({ id: _id, ...rest }) => ({ ...rest, amount: parseAmt(rest.amount) })),
+          receivables,
+          payables,
+          notes,
+        },
+        { onConflict: 'date' }
+      )
     setSaving(false)
-    if (json.error) { alert('저장 실패: ' + json.error); return }
+    if (error) { alert('저장 실패: ' + error.message); return }
     setSaveStatus('저장됨')
     setTimeout(() => setSaveStatus(''), 3000)
   }
