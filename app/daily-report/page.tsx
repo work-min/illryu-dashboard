@@ -35,6 +35,7 @@ function buildReport(
   const d = new Date(date + 'T00:00:00')
   const lines: string[] = [`${d.getMonth() + 1}/${d.getDate()}`]
 
+  // 이체 내역 (총합 없음)
   const validTransfers = transfers.filter(t => parseAmt(t.amount) > 0 && t.description.trim())
   if (validTransfers.length > 0) {
     lines.push('')
@@ -42,29 +43,26 @@ function buildReport(
       const amtStr = fmt(parseAmt(t.amount))
       const desc = t.description.trim()
       const note = t.note.trim()
-      lines.push(note ? `${amtStr}  ${desc} (${note})` : `${amtStr}  ${desc}`)
+      lines.push(note ? `${amtStr} ${desc} (${note})` : `${amtStr} ${desc}`)
     }
-    const total = validTransfers.reduce((s, t) => s + parseAmt(t.amount), 0)
-    lines.push('')
-    lines.push(`총 ${fmt(total)}`)
   }
 
+  // 미수
   const validRcv = receivables.filter(r => r.amount > 0 && r.name.trim())
   if (validRcv.length > 0) {
     lines.push('')
     lines.push('<미수>')
-    lines.push('')
-    for (const r of validRcv) lines.push(`${r.name}  ${fmt(r.amount)}`)
+    for (const r of validRcv) lines.push(`${r.name} ${fmt(r.amount)}`)
     lines.push('')
     lines.push(`총 ${fmt(validRcv.reduce((s, r) => s + r.amount, 0))}`)
   }
 
+  // 미지급
   const validPay = payables.filter(p => p.amount > 0 && p.name.trim())
   if (validPay.length > 0) {
     lines.push('')
     lines.push('<미지급>')
-    lines.push('')
-    for (const p of validPay) lines.push(`${p.name}  ${fmt(p.amount)}`)
+    for (const p of validPay) lines.push(`${p.name} ${fmt(p.amount)}`)
     lines.push('')
     lines.push(`총 ${fmt(validPay.reduce((s, p) => s + p.amount, 0))}`)
   }
