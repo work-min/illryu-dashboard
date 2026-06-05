@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 /* ───── 타입 ───── */
 interface Transfer {
   id: string
-  amount: string   // 입력 편의상 string, 저장 시 숫자 변환
+  amount: string
   description: string
   category: string
   note: string
@@ -19,10 +19,35 @@ const fmt = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const parseAmt = (s: string) => { const n = parseFloat(s.replace(/,/g, '')); return isNaN(n) ? 0 : n }
 const uid = () => Math.random().toString(36).slice(2)
 const todayKST = () => {
-  const now = new Date()
-  // getTime()은 항상 UTC 기준이므로 9시간 고정으로 더하면 항상 정확한 KST 날짜
-  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000)
   return kst.toISOString().slice(0, 10)
+}
+
+/* ───── 엑셀 붙여넣기 파싱 ───── */
+function parseExcelPaste(text: string): Transfer[] {
+  return text.trim().split('\n').flatMap(line => {
+    const trimmed = line.trim()
+    if (!trimmed) return []
+
+    let amount = '', description = ''
+
+    if (trimmed.includes('\t')) {
+      // 엑셀 기본: 탭 구분
+      const parts = trimmed.split('\t').map(p => p.trim())
+      amount = parts[0].replace(/,/g, '')
+      description = parts.slice(1).join(' ').trim()
+    } else {
+      // 공백 구분: 앞쪽 숫자(콤마 포함) + 나머지 텍스트
+      const match = trimmed.match(/^([\d,]+)\s+(.+)$/)
+      if (match) {
+        amount = match[1].replace(/,/g, '')
+        description = match[2].trim()
+      }
+    }
+
+    if (!amount || !description || isNaN(Number(amount))) return []
+    return [{ id: uid(), amount, description, category: '', note: '' }]
+  })
 }
 
 /* ───── 보고서 생성 ───── */
@@ -36,7 +61,6 @@ function buildReport(
   const d = new Date(date + 'T00:00:00')
   const lines: string[] = [`${d.getMonth() + 1}/${d.getDate()}`]
 
-  // 이체 내역 (총합 없음)
   const validTransfers = transfers.filter(t => parseAmt(t.amount) > 0 && t.description.trim())
   if (validTransfers.length > 0) {
     lines.push('')
@@ -46,9 +70,10 @@ function buildReport(
       const note = t.note.trim()
       lines.push(note ? `${amtStr} ${desc} (${note})` : `${amtStr} ${desc}`)
     }
+    lines.push('')
+    lines.push(`총 ${fmt(validTransfers.reduce((s, t) => s + parseAmt(t.amount), 0))}`)
   }
 
-  // 미수
   const validRcv = receivables.filter(r => r.amount > 0 && r.name.trim())
   if (validRcv.length > 0) {
     lines.push('')
@@ -58,7 +83,6 @@ function buildReport(
     lines.push(`총 ${fmt(validRcv.reduce((s, r) => s + r.amount, 0))}`)
   }
 
-  // 미지급
   const validPay = payables.filter(p => p.amount > 0 && p.name.trim())
   if (validPay.length > 0) {
     lines.push('')
@@ -77,7 +101,7 @@ function buildReport(
   return lines.join('\n')
 }
 
-/* ───── 인라인 CSS ───── */
+/* ───── CSS ───── */
 const CSS = `
   :root{--bg:#f8f7ff;--surface:#fff;--border:#e8e4f3;--text:#1a1523;--text-muted:#6b7280;--primary:#7c3aed;--hover-bg:#f3f0ff;--danger:#dc2626;--success:#16a34a}
   .dark{--bg:#0f0d1a;--surface:#1a1727;--border:#2d2640;--text:#f0eeff;--text-muted:#9ca3af;--hover-bg:#252035}
@@ -134,6 +158,10 @@ const CSS = `
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
   textarea.field{width:100%;resize:vertical;min-height:80px;padding:10px}
   .empty-hint{color:var(--text-muted);font-size:13px;padding:16px 0;text-align:center}
+  .paste-zone{width:100%;min-height:72px;resize:vertical;padding:10px 12px;font-size:13px;font-family:'Courier New',monospace;border:2px dashed var(--primary);border-radius:8px;background:var(--hover-bg);color:var(--text);line-height:1.6}
+  .paste-zone:focus{outline:none;background:var(--surface)}
+  .paste-hint{font-size:11px;color:var(--text-muted);margin-top:5px}
+  .section-divider{height:1px;background:var(--border);margin:14px 0}
   @media(max-width:800px){.two-col{grid-template-columns:1fr}}
 `
 
@@ -154,14 +182,13 @@ export default function DailyReportPage() {
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const [copied, setCopied] = useState(false)
+  const [pasteFlash, setPasteFlash] = useState(false)  // 붙여넣기 성공 피드백
 
-  /* 다크모드 */
   useEffect(() => {
     if (dark) document.documentElement.classList.add('dark')
     else document.documentElement.classList.remove('dark')
   }, [dark])
 
-  /* 인증 확인 */
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) { router.push('/login'); return }
@@ -170,21 +197,17 @@ export default function DailyReportPage() {
     })
   }, [router])
 
-  /* 날짜 변경 시 저장된 데이터 불러오기 */
   const loadSaved = useCallback(async (d: string) => {
     const res = await fetch(`/api/daily-report?date=${d}`)
     const json = await res.json()
     if (json.report) {
       const r = json.report
-      setTransfers((r.transfers || []).map((t: Record<string, unknown>) => ({ ...t, id: uid() })))
+      setTransfers((r.transfers || []).map((t: Record<string, unknown>) => ({ ...t, id: uid(), amount: String(t.amount ?? '') })))
       setReceivables(r.receivables || [])
       setPayables(r.payables || [])
       setNotes(r.notes || '')
     } else {
-      setTransfers([])
-      setReceivables([])
-      setPayables([])
-      setNotes('')
+      setTransfers([]); setReceivables([]); setPayables([]); setNotes('')
     }
   }, [])
 
@@ -192,7 +215,6 @@ export default function DailyReportPage() {
     if (!authLoading && date) loadSaved(date)
   }, [date, authLoading, loadSaved])
 
-  /* 시트에서 미수금/미지급금 불러오기 */
   async function loadFromSheets() {
     setSheetsLoading(true)
     try {
@@ -208,16 +230,12 @@ export default function DailyReportPage() {
     }
   }
 
-  /* 저장 */
   async function handleSave() {
-    setSaving(true)
-    setSaveStatus('')
+    setSaving(true); setSaveStatus('')
     const body = {
       date,
       transfers: transfers.map(({ id: _id, ...rest }) => ({ ...rest, amount: parseAmt(rest.amount) })),
-      receivables,
-      payables,
-      notes,
+      receivables, payables, notes,
     }
     const res = await fetch('/api/daily-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const json = await res.json()
@@ -227,36 +245,41 @@ export default function DailyReportPage() {
     setTimeout(() => setSaveStatus(''), 3000)
   }
 
-  /* 복사 */
   async function handleCopy() {
-    const report = buildReport(date, transfers, receivables, payables, notes)
-    await navigator.clipboard.writeText(report)
+    await navigator.clipboard.writeText(buildReport(date, transfers, receivables, payables, notes))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  /* 이체 내역 행 관리 */
-  const addTransfer = () =>
-    setTransfers(prev => [...prev, { id: uid(), amount: '', description: '', category: '', note: '' }])
+  /* 엑셀 붙여넣기 처리 */
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text')
+    const parsed = parseExcelPaste(text)
+    if (parsed.length > 0) {
+      setTransfers(prev => [...prev, ...parsed])
+      setPasteFlash(true)
+      setTimeout(() => setPasteFlash(false), 1500)
+    }
+    // textarea 내용 비우기 (e.currentTarget은 이미 cleared됨)
+    e.currentTarget.value = ''
+  }
 
+  const addTransfer = () => setTransfers(prev => [...prev, { id: uid(), amount: '', description: '', category: '', note: '' }])
   const updateTransfer = (id: string, field: keyof Omit<Transfer, 'id'>, value: string) =>
     setTransfers(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
-
   const removeTransfer = (id: string) => setTransfers(prev => prev.filter(t => t.id !== id))
 
-  /* 미수금 행 관리 */
   const addRcv = () => setReceivables(prev => [...prev, { name: '', amount: 0 }])
   const updateRcv = (i: number, field: keyof Item, value: string) =>
     setReceivables(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: field === 'amount' ? parseAmt(value) : value } : r))
   const removeRcv = (i: number) => setReceivables(prev => prev.filter((_, idx) => idx !== i))
 
-  /* 미지급금 행 관리 */
   const addPay = () => setPayables(prev => [...prev, { name: '', amount: 0 }])
   const updatePay = (i: number, field: keyof Item, value: string) =>
     setPayables(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: field === 'amount' ? parseAmt(value) : value } : p))
   const removePay = (i: number) => setPayables(prev => prev.filter((_, idx) => idx !== i))
 
-  /* ───── 렌더 ───── */
   if (authLoading) return null
 
   const transferTotal = transfers.reduce((s, t) => s + parseAmt(t.amount), 0)
@@ -268,7 +291,6 @@ export default function DailyReportPage() {
     <div className="wrap">
       <style>{CSS}</style>
 
-      {/* 헤더 */}
       <header className="app-header">
         <div className="header-logo" onClick={() => router.push('/dashboard')}>
           <span className="header-title">일류기획</span>
@@ -288,7 +310,6 @@ export default function DailyReportPage() {
 
       <main className="main">
 
-        {/* 날짜 + 상단 버튼 */}
         <div className="top-bar">
           <span className="date-label">보고 날짜</span>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} />
@@ -310,85 +331,81 @@ export default function DailyReportPage() {
                 <h3>이체 내역</h3>
                 {transferTotal > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>합계 {fmt(transferTotal)}</span>}
               </div>
-              {transfers.length === 0 && (
-                <p className="empty-hint">이체 내역이 없습니다. 아래 버튼으로 항목을 추가하세요.</p>
-              )}
+
+              {/* 엑셀 붙여넣기 영역 */}
+              <div style={{ marginBottom: 12 }}>
+                <textarea
+                  className="paste-zone"
+                  placeholder={'엑셀에서 여러 행 복사 후 여기에 붙여넣기\n예) 206360  4일 퍼플페퍼\n    895862  퀀텀 충전'}
+                  onPaste={handlePaste}
+                  style={{ borderColor: pasteFlash ? 'var(--success)' : undefined }}
+                  readOnly={false}
+                />
+                <p className="paste-hint">
+                  {pasteFlash
+                    ? '✓ 이체 내역이 추가되었습니다'
+                    : '엑셀 셀(금액 + 내용)을 복사하여 붙여넣으면 자동으로 분리됩니다'}
+                </p>
+              </div>
+
               {transfers.length > 0 && (
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 110 }}>금액</th>
-                      <th>내용</th>
-                      <th style={{ width: 100 }}>구분</th>
-                      <th style={{ width: 130 }}>비고</th>
-                      <th style={{ width: 36 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transfers.map(t => (
-                      <tr key={t.id}>
-                        <td>
-                          <input
-                            className="field field-amt"
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="0"
-                            value={t.amount}
-                            onChange={e => updateTransfer(t.id, 'amount', e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="field field-desc"
-                            type="text"
-                            placeholder="내용"
-                            value={t.description}
-                            onChange={e => updateTransfer(t.id, 'description', e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="field field-cat"
-                            type="text"
-                            placeholder="구분"
-                            value={t.category}
-                            onChange={e => updateTransfer(t.id, 'category', e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="field field-note"
-                            type="text"
-                            placeholder="비고"
-                            value={t.note}
-                            onChange={e => updateTransfer(t.id, 'note', e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <button className="btn-danger" onClick={() => removeTransfer(t.id)}>✕</button>
-                        </td>
+                <>
+                  <div className="section-divider" />
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 110 }}>금액</th>
+                        <th>내용</th>
+                        <th style={{ width: 100 }}>구분</th>
+                        <th style={{ width: 130 }}>비고</th>
+                        <th style={{ width: 36 }}></th>
                       </tr>
-                    ))}
-                    {transferTotal > 0 && (
-                      <tr className="total-row">
-                        <td colSpan={5} style={{ textAlign: 'right' }}>총 {fmt(transferTotal)}</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {transfers.map(t => (
+                        <tr key={t.id}>
+                          <td>
+                            <input className="field field-amt" type="text" inputMode="numeric"
+                              placeholder="0" value={t.amount}
+                              onChange={e => updateTransfer(t.id, 'amount', e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="field field-desc" type="text" placeholder="내용"
+                              value={t.description}
+                              onChange={e => updateTransfer(t.id, 'description', e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="field field-cat" type="text" placeholder="구분"
+                              value={t.category}
+                              onChange={e => updateTransfer(t.id, 'category', e.target.value)} />
+                          </td>
+                          <td>
+                            <input className="field field-note" type="text" placeholder="비고"
+                              value={t.note}
+                              onChange={e => updateTransfer(t.id, 'note', e.target.value)} />
+                          </td>
+                          <td>
+                            <button className="btn-danger" onClick={() => removeTransfer(t.id)}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                      {transferTotal > 0 && (
+                        <tr className="total-row">
+                          <td colSpan={5} style={{ textAlign: 'right' }}>총 {fmt(transferTotal)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </>
               )}
-              <button className="btn-add" onClick={addTransfer}>+ 이체 항목 추가</button>
+              <button className="btn-add" onClick={addTransfer}>+ 직접 추가</button>
             </div>
 
             {/* 특이사항 */}
             <div className="card">
               <div className="card-header"><h3>특이사항</h3></div>
-              <textarea
-                className="field"
-                placeholder="특이사항을 입력하세요 (선택)"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
+              <textarea className="field" placeholder="특이사항을 입력하세요 (선택)"
+                value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
 
             {/* 미수금 */}
@@ -413,23 +430,17 @@ export default function DailyReportPage() {
                   <tbody>
                     {receivables.map((r, i) => (
                       <tr key={i}>
-                        <td>
-                          <input className="field field-desc" type="text" value={r.name}
-                            onChange={e => updateRcv(i, 'name', e.target.value)} />
-                        </td>
-                        <td>
-                          <input className="field field-amt" type="text" inputMode="numeric"
-                            value={r.amount === 0 ? '' : r.amount.toLocaleString('ko-KR')}
-                            onChange={e => updateRcv(i, 'amount', e.target.value)} />
-                        </td>
+                        <td><input className="field field-desc" type="text" value={r.name}
+                          onChange={e => updateRcv(i, 'name', e.target.value)} /></td>
+                        <td><input className="field field-amt" type="text" inputMode="numeric"
+                          value={r.amount === 0 ? '' : r.amount.toLocaleString('ko-KR')}
+                          onChange={e => updateRcv(i, 'amount', e.target.value)} /></td>
                         <td><button className="btn-danger" onClick={() => removeRcv(i)}>✕</button></td>
                       </tr>
                     ))}
                     {rcvTotal > 0 && (
                       <tr className="total-row">
-                        <td>합계</td>
-                        <td className="amount-cell">{fmt(rcvTotal)}</td>
-                        <td></td>
+                        <td>합계</td><td className="amount-cell">{fmt(rcvTotal)}</td><td></td>
                       </tr>
                     )}
                   </tbody>
@@ -460,23 +471,17 @@ export default function DailyReportPage() {
                   <tbody>
                     {payables.map((p, i) => (
                       <tr key={i}>
-                        <td>
-                          <input className="field field-desc" type="text" value={p.name}
-                            onChange={e => updatePay(i, 'name', e.target.value)} />
-                        </td>
-                        <td>
-                          <input className="field field-amt" type="text" inputMode="numeric"
-                            value={p.amount === 0 ? '' : p.amount.toLocaleString('ko-KR')}
-                            onChange={e => updatePay(i, 'amount', e.target.value)} />
-                        </td>
+                        <td><input className="field field-desc" type="text" value={p.name}
+                          onChange={e => updatePay(i, 'name', e.target.value)} /></td>
+                        <td><input className="field field-amt" type="text" inputMode="numeric"
+                          value={p.amount === 0 ? '' : p.amount.toLocaleString('ko-KR')}
+                          onChange={e => updatePay(i, 'amount', e.target.value)} /></td>
                         <td><button className="btn-danger" onClick={() => removePay(i)}>✕</button></td>
                       </tr>
                     ))}
                     {payTotal > 0 && (
                       <tr className="total-row">
-                        <td>합계</td>
-                        <td className="amount-cell">{fmt(payTotal)}</td>
-                        <td></td>
+                        <td>합계</td><td className="amount-cell">{fmt(payTotal)}</td><td></td>
                       </tr>
                     )}
                   </tbody>
@@ -487,7 +492,7 @@ export default function DailyReportPage() {
 
           </div>
 
-          {/* 보고서 미리보기 (오른쪽 패널) */}
+          {/* 보고서 미리보기 */}
           <div className="card" style={{ position: 'sticky', top: 80, alignSelf: 'flex-start' }}>
             <div className="card-header">
               <h3>보고서 미리보기</h3>
