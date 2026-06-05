@@ -815,6 +815,7 @@ export default function DashboardPage() {
             <nav style={{display:'flex',gap:'4px',marginRight:'8px'}}>
               <a href="/dashboard" style={{padding:'6px 14px',borderRadius:'6px',fontSize:'13px',fontWeight:600,background:'var(--primary)',color:'white',textDecoration:'none',border:'1px solid var(--primary)'}}>손익 대시보드</a>
               <a href="/settlement" style={{padding:'6px 14px',borderRadius:'6px',fontSize:'13px',fontWeight:600,background:'var(--surface)',color:'var(--text-muted)',textDecoration:'none',border:'1px solid var(--border)'}}>정산</a>
+              <a href="/daily-report" style={{padding:'6px 14px',borderRadius:'6px',fontSize:'13px',fontWeight:600,background:'var(--surface)',color:'var(--text-muted)',textDecoration:'none',border:'1px solid var(--border)'}}>일마감</a>
             </nav>
             <button className="theme-toggle" onClick={() => setDark(d => !d)} title="다크/라이트 모드">
               {dark ? '☀️' : '🌙'}

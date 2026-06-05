@@ -290,6 +290,7 @@ export default function SettlementPage() {
             <nav style={{ display: 'flex', gap: 4 }}>
               <a className="nav-tab" href="/dashboard">손익 대시보드</a>
               <a className="nav-tab active" href="/settlement">정산</a>
+              <a className="nav-tab" href="/daily-report">일마감</a>
             </nav>
             <button className="theme-toggle" onClick={() => setDark(d => !d)}>{dark ? '☀️' : '🌙'}</button>
             <span className="user-badge">
