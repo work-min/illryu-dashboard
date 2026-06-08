@@ -91,6 +91,7 @@ export default function SettlementPage() {
   const [editMode, setEditMode] = useState(false)
 
   const [operatingProfit, setOperatingProfit] = useState(0)
+  const [totalSales, setTotalSales] = useState(0)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [expenses, setExpenses] = useState<Expenses>({ fixed: 0, variable: 0, total: 0 })
 
@@ -123,9 +124,9 @@ export default function SettlementPage() {
   const regularTotal = regularEmps.reduce((s, e) => s + e.net, 0)
   const totalPayroll = employees.reduce((s, e) => s + e.net, 0)
   const finalProfit = operatingProfit - totalPayroll - expenses.total
-  const payrollRate = operatingProfit > 0 ? (totalPayroll / operatingProfit) * 100 : 0
-  const expenseRate = operatingProfit > 0 ? (expenses.total / operatingProfit) * 100 : 0
-  const finalRate = operatingProfit > 0 ? (finalProfit / operatingProfit) * 100 : 0
+  const payrollRate = totalSales > 0 ? (totalPayroll / totalSales) * 100 : 0
+  const expenseRate = totalSales > 0 ? (expenses.total / totalSales) * 100 : 0
+  const finalRate = totalSales > 0 ? (finalProfit / totalSales) * 100 : 0
 
   async function handleLogout() { await supabase.auth.signOut(); router.push('/login') }
 
@@ -136,8 +137,9 @@ export default function SettlementPage() {
     const isCurrent = y === kst.getFullYear() && m === kst.getMonth() + 1
     setIsCurrentMonth(isCurrent)
 
-    const { data: txData } = await supabase.from('transactions').select('profit').eq('year', y).eq('month', m)
+    const { data: txData } = await supabase.from('transactions').select('sales,profit').eq('year', y).eq('month', m)
     setOperatingProfit(txData ? txData.reduce((s, t) => s + (t.profit || 0), 0) : 0)
+    setTotalSales(txData ? txData.reduce((s, t) => s + (t.sales || 0), 0) : 0)
 
     // 전월 정산 레코드
     const prevY = m === 1 ? y - 1 : y, prevM = m === 1 ? 12 : m - 1
@@ -411,17 +413,17 @@ export default function SettlementPage() {
               <div className="kpi-card" style={{ borderLeft: '3px solid #f59e0b' }}>
                 <div className="kpi-label">인건비 비율</div>
                 <div className="kpi-value" style={{ fontSize: 32 }}>{fmtRate(payrollRate)}</div>
-                <div className="kpi-sub">영업팀 급여 ÷ 영업이익</div>
+                <div className="kpi-sub">영업팀 급여 ÷ 총매출</div>
               </div>
               <div className="kpi-card" style={{ borderLeft: '3px solid #a855f7' }}>
                 <div className="kpi-label">지출 비율</div>
                 <div className="kpi-value" style={{ fontSize: 32 }}>{fmtRate(expenseRate)}</div>
-                <div className="kpi-sub">총 지출 ÷ 영업이익</div>
+                <div className="kpi-sub">총 지출 ÷ 총매출</div>
               </div>
               <div className="kpi-card" style={{ borderLeft: `3px solid ${finalRate >= 0 ? '#16a34a' : '#dc2626'}` }}>
                 <div className="kpi-label">최종 이익률</div>
                 <div className={`kpi-value ${finalRate < 0 ? 'negative' : finalRate > 0 ? 'positive' : ''}`} style={{ fontSize: 32 }}>{fmtRate(finalRate)}</div>
-                <div className="kpi-sub">최종 이익 ÷ 영업이익</div>
+                <div className="kpi-sub">최종 이익 ÷ 총매출</div>
               </div>
             </section>
 
