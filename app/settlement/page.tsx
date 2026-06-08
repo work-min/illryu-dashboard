@@ -389,7 +389,7 @@ export default function SettlementPage() {
             <section className="kpi-row">
               {[
                 { label: '총 영업이익', cur: operatingProfit, prev: prevRecord?.operating_profit, sub: '손익 대시보드 기준', colored: false },
-                { label: '영업팀 총 급여', cur: totalPayroll, prev: prevRecord?.total_payroll, sub: isSimple ? '영업팀 + 정규직' : employees.length > 0 ? `${employees.length}명` : '데이터 없음', colored: false },
+                { label: '총 급여', cur: totalPayroll, prev: prevRecord?.total_payroll, sub: isSimple ? '영업팀 + 정규직' : employees.length > 0 ? `${employees.length}명` : '데이터 없음', colored: false },
                 { label: '총 지출', cur: expenses.total, prev: prevRecord?.total_expenses, sub: '고정 + 유동', colored: false },
                 { label: '최종 이익', cur: finalProfit, prev: prevRecord?.final_profit, sub: '영업이익 - 급여 - 지출', colored: true },
               ].map(({ label, cur, prev, sub, colored }) => {
