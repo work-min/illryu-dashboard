@@ -408,12 +408,16 @@ export default function DashboardPage() {
       const { data } = await q
       setCurrentRows(data || [])
 
-      // 전월 비교: 년+월 지정된 경우만 (다른 필터 없이 월 전체)
+      // 전월 비교: 년+월 지정된 경우, 동일 구간(주차/일/구분/검색) 기준으로 비교
       if (y > 0 && m > 0) {
         const pm = m === 1 ? 12 : m - 1
         const py = m === 1 ? y - 1 : y
-        const { data: prev } = await supabase.from('transactions')
-          .select('*').eq('year', py).eq('month', pm)
+        let pq = supabase.from('transactions').select('*').eq('year', py).eq('month', pm)
+        if (week) pq = pq.eq('week', week)
+        if (day) pq = pq.eq('day', Number(day))
+        if (cats.size > 0) pq = pq.in('category', [...cats])
+        if (s.trim()) pq = pq.or(`company.ilike.%${s}%,trade_name.ilike.%${s}%,manager.ilike.%${s}%`)
+        const { data: prev } = await pq
         setPrevRows(prev || [])
       } else {
         setPrevRows([])
@@ -631,16 +635,17 @@ export default function DashboardPage() {
 
   /* ─ 전월 비교 표시 ─ */
   const hasPrev = prevRows.length > 0
+  const prevLabel = `${prevYear}년 ${prevMonth}월${filterWeek ? ` ${filterWeek}` : ''}${filterDay ? ` ${filterDay}일` : ''}`
   function showChange(curr: number, prev: number, betterIsUp: boolean) {
     if (!hasPrev) return ''
     const diff = curr - prev
-    if (diff === 0) return '─ 전월 동일'
+    if (diff === 0) return `─ ${prevLabel}와 동일`
     const isUp = diff > 0
     const arrow = isUp ? '▲' : '▼'
     const pct = prev !== 0 ? Math.abs(((curr - prev) / Math.abs(prev)) * 100) : 100
     const pctStr = pct > 999 ? '999%+' : pct.toFixed(1) + '%'
     const good = isUp === betterIsUp
-    return <span className={good ? 'kpi-change up' : 'kpi-change down'}>{arrow} {pctStr} vs {prevYear}년 {prevMonth}월</span>
+    return <span className={good ? 'kpi-change up' : 'kpi-change down'}>{arrow} {pctStr} vs {prevLabel}</span>
   }
 
   if (loading) return (
@@ -895,7 +900,7 @@ export default function DashboardPage() {
             <div className="kpi-card">
               <div className="kpi-label">손익률</div>
               <div className={`kpi-value ${kpi.profitRate < 0 ? 'negative' : ''}`}>{fmtRate(kpi.profitRate)}</div>
-              <div className="kpi-change">{hasPrev ? <span className={kpi.profitRate > prevKpi.profitRate ? 'kpi-change up' : 'kpi-change down'}>{kpi.profitRate > prevKpi.profitRate ? '▲' : '▼'} {Math.abs(kpi.profitRate - prevKpi.profitRate).toFixed(2)}%p vs {prevYear}년 {prevMonth}월</span> : ''}</div>
+              <div className="kpi-change">{hasPrev ? <span className={kpi.profitRate > prevKpi.profitRate ? 'kpi-change up' : 'kpi-change down'}>{kpi.profitRate > prevKpi.profitRate ? '▲' : '▼'} {Math.abs(kpi.profitRate - prevKpi.profitRate).toFixed(2)}%p vs {prevLabel}</span> : ''}</div>
             </div>
           </section>
 
