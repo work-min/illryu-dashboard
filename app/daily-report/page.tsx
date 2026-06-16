@@ -74,7 +74,7 @@ function buildReport(
     lines.push(`총 ${fmt(validTransfers.reduce((s, t) => s + parseAmt(t.amount), 0))}`)
   }
 
-  const validRcv = receivables.filter(r => r.amount > 0 && r.name.trim())
+  const validRcv = receivables.filter(r => r.amount !== 0 && r.name.trim())
   if (validRcv.length > 0) {
     lines.push('')
     lines.push('<미수>')
@@ -83,7 +83,7 @@ function buildReport(
     lines.push(`총 ${fmt(validRcv.reduce((s, r) => s + r.amount, 0))}`)
   }
 
-  const validPay = payables.filter(p => p.amount > 0 && p.name.trim())
+  const validPay = payables.filter(p => p.amount !== 0 && p.name.trim())
   if (validPay.length > 0) {
     lines.push('')
     lines.push('<미지급>')
