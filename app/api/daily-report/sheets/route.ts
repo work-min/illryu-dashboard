@@ -69,21 +69,21 @@ export async function GET() {
     for (let i = 2; i < rows.length; i++) {
       const name = cell(rows, i, 1)   // B열
       const amount = num(cell(rows, i, 6))  // G열
-      if (name && amount > 0) receivables.push({ name, amount })
+      if (name && amount !== 0) receivables.push({ name, amount })
     }
 
     // 영역 2: M1(rows[0][12]) 업체명 / N1(rows[0][13]) 금액
     {
       const name = cell(rows, 0, 12)   // M1
       const amount = num(cell(rows, 0, 13)) // N1
-      if (name && amount > 0) receivables.push({ name, amount })
+      if (name && amount !== 0) receivables.push({ name, amount })
     }
 
     // 영역 3: S1(rows[0][18]) 업체명 / T1(rows[0][19]) 금액
     {
       const name = cell(rows, 0, 18)   // S1
       const amount = num(cell(rows, 0, 19)) // T1
-      if (name && amount > 0) receivables.push({ name, amount })
+      if (name && amount !== 0) receivables.push({ name, amount })
     }
 
     // ────────────────────────────────────────────
@@ -94,14 +94,14 @@ export async function GET() {
     for (let i = 2; i < rows.length; i++) {
       const name = cell(rows, i, 22)   // W열
       const amount = num(cell(rows, i, 26)) // AA열
-      if (name && amount > 0) payables.push({ name, amount })
+      if (name && amount !== 0) payables.push({ name, amount })
     }
 
     // 영역 2: AD2(rows[1][29]) 업체명 / AF1(rows[0][31]) 금액
     {
       const name = cell(rows, 1, 29)   // AD2
       const amount = num(cell(rows, 0, 31)) // AF1
-      if (name && amount > 0) payables.push({ name, amount })
+      if (name && amount !== 0) payables.push({ name, amount })
     }
 
     return NextResponse.json({ receivables, payables })
