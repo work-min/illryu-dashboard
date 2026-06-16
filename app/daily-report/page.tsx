@@ -37,8 +37,8 @@ function parseExcelPaste(text: string): Transfer[] {
       amount = parts[0].replace(/,/g, '')
       description = parts.slice(1).join(' ').trim()
     } else {
-      // 공백 구분: 앞쪽 숫자(콤마 포함) + 나머지 텍스트
-      const match = trimmed.match(/^([\d,]+)\s+(.+)$/)
+      // 공백 구분: 앞쪽 숫자(콤마 포함, 마이너스 허용) + 나머지 텍스트
+      const match = trimmed.match(/^(-?[\d,]+)\s+(.+)$/)
       if (match) {
         amount = match[1].replace(/,/g, '')
         description = match[2].trim()
@@ -61,7 +61,7 @@ function buildReport(
   const d = new Date(date + 'T00:00:00')
   const lines: string[] = [`${d.getMonth() + 1}/${d.getDate()}`]
 
-  const validTransfers = transfers.filter(t => parseAmt(t.amount) > 0 && t.description.trim())
+  const validTransfers = transfers.filter(t => parseAmt(t.amount) !== 0 && t.description.trim())
   if (validTransfers.length > 0) {
     lines.push('')
     for (const t of validTransfers) {
@@ -336,7 +336,7 @@ export default function DailyReportPage() {
             <div className="card">
               <div className="card-header">
                 <h3>이체 내역</h3>
-                {transferTotal > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>합계 {fmt(transferTotal)}</span>}
+                {transferTotal !== 0 && <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>합계 {fmt(transferTotal)}</span>}
               </div>
 
               {/* 엑셀 붙여넣기 영역 */}
@@ -396,7 +396,7 @@ export default function DailyReportPage() {
                           </td>
                         </tr>
                       ))}
-                      {transferTotal > 0 && (
+                      {transferTotal !== 0 && (
                         <tr className="total-row">
                           <td colSpan={5} style={{ textAlign: 'right' }}>총 {fmt(transferTotal)}</td>
                         </tr>
