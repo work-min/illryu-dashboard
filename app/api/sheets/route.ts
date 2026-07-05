@@ -1,6 +1,22 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
+const DEFAULT_SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
+
+type SheetTransaction = {
+  date: string
+  year: number
+  month: number
+  day: number
+  week: string
+  category: string
+  manager: string
+  company: string
+  trade_name: string
+  sales: number
+  purchase: number
+  profit: number
+  source: string
+}
 
 function b64url(str: string) {
   return Buffer.from(str).toString('base64url')
@@ -63,8 +79,8 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
-async function fetchSheet(token: string, range: string): Promise<string[][]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(range)}`
+async function fetchSheet(token: string, spreadsheetId: string, range: string): Promise<string[][]> {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   const data = await res.json()
   return (data.values || []).map((r: unknown[]) => r.map(String))
@@ -109,7 +125,7 @@ function parseDate(raw: string): string | null {
   return null
 }
 
-function parseListTab(rows: string[][]): object[] {
+function parseListTab(rows: string[][]): SheetTransaction[] {
   const headerIdx = findHeaderIdx(rows, ['날짜', '일자'])
   if (headerIdx === -1) return []
   const header = rows[headerIdx].map(c => c.trim())
@@ -146,7 +162,7 @@ function parseListTab(rows: string[][]): object[] {
   })
 }
 
-function parseIncomeTab(rows: string[][]): object[] {
+function parseIncomeTab(rows: string[][]): SheetTransaction[] {
   const headerIdx = findHeaderIdx(rows, ['계약일자'])
   if (headerIdx === -1) return []
   const header = rows[headerIdx].map(c => c.trim())
@@ -181,14 +197,20 @@ function parseIncomeTab(rows: string[][]): object[] {
   })
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url)
+    const spreadsheetId = searchParams.get('spreadsheetId') || DEFAULT_SPREADSHEET_ID
+    const filterYear = Number(searchParams.get('year') || 0)
+    const filterMonth = Number(searchParams.get('month') || 0)
     const token = await getAccessToken()
     const [listRows, incomeRows] = await Promise.all([
-      fetchSheet(token, '리스트!A:S'),
-      fetchSheet(token, '귀속 입금건!A:L'),
+      fetchSheet(token, spreadsheetId, '리스트!A:AD'),
+      fetchSheet(token, spreadsheetId, '귀속 입금건!A:N'),
     ])
-    const transactions = [...parseListTab(listRows), ...parseIncomeTab(incomeRows)]
+    let transactions = [...parseListTab(listRows), ...parseIncomeTab(incomeRows)]
+    if (filterYear) transactions = transactions.filter(t => t.year === filterYear)
+    if (filterMonth) transactions = transactions.filter(t => t.month === filterMonth)
     return NextResponse.json({ transactions, count: transactions.length })
   } catch (err) {
     console.error('Sheets 오류:', err)
