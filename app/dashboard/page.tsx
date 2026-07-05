@@ -366,7 +366,6 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [syncLoading, setSyncLoading] = useState(false)
-  const [juneReplaceLoading, setJuneReplaceLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [dark, setDark] = useState(false)
 
@@ -595,114 +594,6 @@ export default function DashboardPage() {
       alert('동기화 실패: ' + String(err))
     } finally {
       setSyncLoading(false)
-    }
-  }
-
-  // 2026년 6월 거래 재반영: 지정 사본 시트의 6월 거래만 확정 데이터로 교체
-  const handleReplaceJuneTransactions = async () => {
-    const targetYear = 2026
-    const targetMonth = 6
-    const sourceSpreadsheetId = '18WCvKsJRu1voMICfyH6RfqVJg_LcltJOh0qPXHtZiDs'
-
-    if (!confirm('2026년 6월 거래내역을 모두 삭제한 뒤, 전달받은 사본 시트의 6월 거래 516건으로 다시 반영합니다.\n급여/지출/일마감 데이터는 유지됩니다.\n계속하시겠습니까?')) return
-
-    setJuneReplaceLoading(true)
-    try {
-      const res = await fetch(`/api/sheets?spreadsheetId=${sourceSpreadsheetId}&year=${targetYear}&month=${targetMonth}`)
-      const json = await res.json()
-      if (!res.ok || json.error) throw new Error(json.error || `시트 조회 실패 (${res.status})`)
-
-      const rows: Transaction[] = json.transactions || []
-      if (!rows.length) throw new Error('사본 시트에서 2026년 6월 거래를 찾지 못했습니다.')
-
-      const summary = rows.reduce((acc, row) => {
-        acc.sales += row.sales || 0
-        acc.purchase += row.purchase || 0
-        acc.profit += row.profit || 0
-        return acc
-      }, { sales: 0, purchase: 0, profit: 0 })
-
-      const confirmed = confirm(
-        `사본 시트에서 2026년 6월 거래 ${rows.length.toLocaleString()}건을 읽었습니다.\n` +
-        `매출 ${fmt(summary.sales)}원 / 매입 ${fmt(summary.purchase)}원 / 영업이익 ${fmt(summary.profit)}원\n\n` +
-        '현재 DB의 2026년 6월 거래내역을 삭제하고 위 데이터로 교체할까요?'
-      )
-      if (!confirmed) return
-
-      const { data: settlement } = await supabase
-        .from('settlement_records')
-        .select('*')
-        .eq('year', targetYear)
-        .eq('month', targetMonth)
-        .maybeSingle()
-
-      const { error: deleteError } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('year', targetYear)
-        .eq('month', targetMonth)
-      if (deleteError) throw new Error(`기존 6월 거래 삭제 실패: ${deleteError.message}`)
-
-      const closedAt = new Date().toISOString()
-      const insertRows = rows.map(row => ({
-        date: row.date,
-        year: row.year,
-        month: row.month,
-        day: row.day,
-        week: row.week,
-        category: row.category,
-        manager: row.manager,
-        company: row.company,
-        trade_name: row.trade_name,
-        sales: row.sales,
-        purchase: row.purchase,
-        profit: row.profit,
-        source: row.source || 'live',
-        is_closed: true,
-        closed_at: closedAt,
-      }))
-
-      const BATCH = 100
-      for (let i = 0; i < insertRows.length; i += BATCH) {
-        const { error: insertError } = await supabase
-          .from('transactions')
-          .insert(insertRows.slice(i, i + BATCH))
-        if (insertError) throw new Error(`6월 거래 반영 실패: ${insertError.message}`)
-      }
-
-      if (settlement) {
-        const totalPayroll = settlement.total_payroll || 0
-        const totalExpenses = settlement.total_expenses || 0
-        const { error: settlementError } = await supabase
-          .from('settlement_records')
-          .update({
-            operating_profit: summary.profit,
-            final_profit: summary.profit - totalPayroll - totalExpenses,
-          })
-          .eq('year', targetYear)
-          .eq('month', targetMonth)
-        if (settlementError) throw new Error(`정산 영업이익 재계산 실패: ${settlementError.message}`)
-      }
-
-      await fetchPeriods()
-      setYear(targetYear)
-      setMonth(targetMonth)
-      setFilterWeek('')
-      setFilterDay('')
-      setSelCats(new Set())
-      setSearch('')
-      setDebouncedSearch('')
-      await fetchFilteredData(targetYear, targetMonth, '', '', new Set(), '')
-
-      alert(
-        `✅ 2026년 6월 거래 재반영 완료\n` +
-        `${rows.length.toLocaleString()}건 / 매출 ${fmt(summary.sales)}원 / 매입 ${fmt(summary.purchase)}원 / 영업이익 ${fmt(summary.profit)}원\n` +
-        (settlement ? '급여/지출은 유지하고 최종이익을 재계산했습니다.' : '6월 정산 저장본은 없어 거래내역만 반영했습니다.')
-      )
-    } catch (err) {
-      alert('6월 재반영 실패: ' + String(err))
-    } finally {
-      setJuneReplaceLoading(false)
     }
   }
 
@@ -941,9 +832,6 @@ export default function DashboardPage() {
             <button className="btn btn-primary" onClick={handleSyncSheets} disabled={syncLoading}>
               {syncLoading ? '⏳ 동기화 중...' : '🔄 시트 동기화'}
             </button>
-            <button className="btn btn-secondary" onClick={handleReplaceJuneTransactions} disabled={juneReplaceLoading}>
-              {juneReplaceLoading ? '⏳ 6월 반영 중...' : '♻️ 6월 재반영'}
-            </button>
             <button className="btn btn-secondary" onClick={handleSnapshot}>💾 보고서 저장</button>
             <button className="btn btn-secondary" onClick={handlePDF}>📄 PDF 다운로드</button>
           </div>
@@ -989,28 +877,6 @@ export default function DashboardPage() {
             <button className="btn btn-primary" onClick={() => setPage(1)}>조회</button>
             <button className="btn btn-ghost" onClick={resetFilters}>초기화</button>
           </div>
-        </section>
-
-        <section style={{
-          background: 'var(--surface)',
-          border: '2px solid var(--primary)',
-          borderRadius: 12,
-          padding: '14px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>2026년 6월 거래내역 재반영</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-              사본 시트 기준 516건으로 거래내역만 교체하고, 급여/지출/일마감은 유지합니다.
-            </div>
-          </div>
-          <button className="btn btn-primary" onClick={handleReplaceJuneTransactions} disabled={juneReplaceLoading}>
-            {juneReplaceLoading ? '⏳ 6월 반영 중...' : '♻️ 2026년 6월 재반영 실행'}
-          </button>
         </section>
 
         <main id="dashboard">
