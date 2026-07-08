@@ -904,7 +904,50 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* 업체별 + 일자별 */}
+          {/* 구분별 + 일자별 */}
+          <section className="chart-row">
+            <div className="card">
+              <h3>구분별 손익 요약</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>구분</th><th className="num">건수</th><th className="num">매출</th><th className="num">매입</th><th className="num">순익</th></tr></thead>
+                  <tbody>
+                    {categoryData.map(r => (
+                      <tr key={r.category}>
+                        <td>{r.category}</td>
+                        <td className="num">{fmt(r.count)}</td>
+                        <td className="num">{fmt(r.sales)}</td>
+                        <td className="num">{fmt(r.purchase)}</td>
+                        <td className={`num ${r.profit < 0 ? 'negative' : 'positive'}`}>{fmt(r.profit)}</td>
+                      </tr>
+                    ))}
+                    {!categoryData.length && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>데이터 없음</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="card chart-card">
+              <h3>일자별 손익 추이</h3>
+              <div className="chart-wrap">
+                {dailyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dailyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                      <YAxis tickFormatter={v => fmt(Number(v))} tick={{ fontSize: 10 }} width={80} />
+                      <Tooltip formatter={(v) => fmtKRW(Number(v))} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Line type="monotone" dataKey="sales" name="매출" stroke="#2563eb" strokeWidth={3} dot={false} />
+                      <Line type="monotone" dataKey="purchase" name="매입" stroke="#dc2626" strokeWidth={3} dot={false} />
+                      <Line type="monotone" dataKey="profit" name="순익" stroke="#16a34a" strokeWidth={3} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <p style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 60 }}>데이터 없음</p>}
+              </div>
+            </div>
+          </section>
+
+          {/* 업체별 + 적자 TOP 5 */}
           <section className="chart-row">
             <div className="card chart-card">
               <div className="card-header">
@@ -927,23 +970,22 @@ export default function DashboardPage() {
                 ) : <p style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 60 }}>데이터 없음</p>}
               </div>
             </div>
-            <div className="card chart-card">
-              <h3>일자별 손익 추이</h3>
-              <div className="chart-wrap">
-                {dailyData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dailyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                      <YAxis tickFormatter={v => fmt(Number(v))} tick={{ fontSize: 10 }} width={80} />
-                      <Tooltip formatter={(v) => fmtKRW(Number(v))} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Line type="monotone" dataKey="sales" name="매출" stroke="#2563eb" strokeWidth={3} dot={false} />
-                      <Line type="monotone" dataKey="purchase" name="매입" stroke="#dc2626" strokeWidth={3} dot={false} />
-                      <Line type="monotone" dataKey="profit" name="순익" stroke="#16a34a" strokeWidth={3} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : <p style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 60 }}>데이터 없음</p>}
+            <div className="card">
+              <h3>적자 업체 TOP 5</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>순위</th><th>업체명</th><th className="num">순익</th></tr></thead>
+                  <tbody>
+                    {lossData.map((r, i) => (
+                      <tr key={r.company}>
+                        <td>{i + 1}</td>
+                        <td>{r.company}</td>
+                        <td className="num negative">{fmt(r.profit)}</td>
+                      </tr>
+                    ))}
+                    {!lossData.length && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>적자 업체 없음 🎉</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>
@@ -968,51 +1010,9 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* 구분별 + 적자 TOP 5 */}
-          <section className="chart-row">
-            <div className="card">
-              <h3>구분별 손익 요약</h3>
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th>구분</th><th className="num">건수</th><th className="num">매출</th><th className="num">매입</th><th className="num">순익</th></tr></thead>
-                  <tbody>
-                    {categoryData.map(r => (
-                      <tr key={r.category}>
-                        <td>{r.category}</td>
-                        <td className="num">{fmt(r.count)}</td>
-                        <td className="num">{fmt(r.sales)}</td>
-                        <td className="num">{fmt(r.purchase)}</td>
-                        <td className={`num ${r.profit < 0 ? 'negative' : 'positive'}`}>{fmt(r.profit)}</td>
-                      </tr>
-                    ))}
-                    {!categoryData.length && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>데이터 없음</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="card">
-              <h3>적자 업체 TOP 5</h3>
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th>순위</th><th>업체명</th><th className="num">순익</th></tr></thead>
-                  <tbody>
-                    {lossData.map((r, i) => (
-                      <tr key={r.company}>
-                        <td>{i + 1}</td>
-                        <td>{r.company}</td>
-                        <td className="num negative">{fmt(r.profit)}</td>
-                      </tr>
-                    ))}
-                    {!lossData.length && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>적자 업체 없음 🎉</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-
           {/* 피벗 테이블 */}
           <section className="card">
-            <h3>업체별 상호명 순익 분포 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>(대행사명 + 상호명 기준)</span></h3>
+            <h3>업체별 상호명 손익 분포 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>(대행사명 + 상호명 기준)</span></h3>
             <PivotTable rows={currentRows} />
           </section>
 
