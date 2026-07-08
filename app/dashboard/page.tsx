@@ -38,6 +38,13 @@ const BULK_UPDATE_FIELDS = [
   { value: 'trade_name', label: '상호명', placeholder: '예: 김작가' },
 ] as const
 type BulkUpdateField = typeof BULK_UPDATE_FIELDS[number]['value']
+type GuaranteeManagedView = 'all' | 'managed' | 'guarantee'
+
+const GUARANTEE_MANAGED_TABS: { value: GuaranteeManagedView; label: string; categories: string[] }[] = [
+  { value: 'all', label: '전체', categories: ['관리형', '보장형', '보장 완료', '중단건'] },
+  { value: 'managed', label: '관리형', categories: ['관리형'] },
+  { value: 'guarantee', label: '보장형', categories: ['보장형', '보장 완료', '중단건'] },
+]
 
 function getProductCategory(value: string | null | undefined) {
   const raw = String(value || '').trim()
@@ -397,6 +404,7 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
   const [editRow, setEditRow] = useState<Partial<Transaction> | null>(null)  // null = 닫힘, {} = 새 항목, row = 수정
+  const [guaranteeManagedView, setGuaranteeManagedView] = useState<GuaranteeManagedView>('all')
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
@@ -527,10 +535,10 @@ export default function DashboardPage() {
     () => buildCompanyData(currentRows.filter(t => getProductCategory(t.category) === '접수형')),
     [buildCompanyData, currentRows]
   )
-  const guaranteeManagedRows = useMemo(
-    () => currentRows.filter(t => ['관리형', '보장형', '보장 완료', '중단건'].includes(getProductCategory(t.category))),
-    [currentRows]
-  )
+  const guaranteeManagedRows = useMemo(() => {
+    const active = GUARANTEE_MANAGED_TABS.find(tab => tab.value === guaranteeManagedView) || GUARANTEE_MANAGED_TABS[0]
+    return currentRows.filter(t => active.categories.includes(getProductCategory(t.category)))
+  }, [currentRows, guaranteeManagedView])
   const unclassifiedRows = useMemo(
     () => currentRows.filter(t => getProductCategory(t.category) === '(미분류)'),
     [currentRows]
@@ -753,6 +761,12 @@ export default function DashboardPage() {
         .card h3{margin:0 0 16px;font-size:15px;font-weight:600}
         .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
         .card-header h3{margin:0}
+        .section-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+        .section-header h3{margin:0}
+        .tab-buttons{display:flex;gap:4px;background:var(--header-bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+        .tab-buttons button{height:30px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--text-muted);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+        .tab-buttons button.active{background:var(--surface);color:var(--primary);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+        .tab-buttons button:hover:not(.active){background:var(--hover-bg);color:var(--text)}
         .badge{display:inline-block;padding:4px 10px;background:var(--badge-bg);color:var(--primary);border-radius:12px;font-size:12px;font-weight:600}
         .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
         .chart-card{margin-bottom:20px}
@@ -1075,7 +1089,23 @@ export default function DashboardPage() {
 
           {/* 피벗 테이블 */}
           <section className="card">
-            <h3>보장형 · 관리형 손익 분포 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>(대행사명 + 상호명 기준)</span></h3>
+            <div className="section-header">
+              <h3>보장형 · 관리형 손익 분포 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>(대행사명 + 상호명 기준)</span></h3>
+              <div className="tab-buttons" role="tablist" aria-label="보장형 관리형 손익 분포 조회 기준">
+                {GUARANTEE_MANAGED_TABS.map(tab => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={guaranteeManagedView === tab.value}
+                    className={guaranteeManagedView === tab.value ? 'active' : ''}
+                    onClick={() => setGuaranteeManagedView(tab.value)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <PivotTable rows={guaranteeManagedRows} />
           </section>
 
