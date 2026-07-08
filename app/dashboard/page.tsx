@@ -45,11 +45,25 @@ const GUARANTEE_MANAGED_TABS: { value: GuaranteeManagedView; label: string; cate
   { value: 'managed', label: '관리형', categories: ['관리형'] },
   { value: 'guarantee', label: '보장형', categories: ['보장형', '보장 완료', '중단건'] },
 ]
+const GUARANTEE_SUMMARY_CATEGORIES = ['보장형', '보장 완료', '중단건']
 
 function getProductCategory(value: string | null | undefined) {
   const raw = String(value || '').trim()
   if (!raw) return '(미분류)'
   return PRODUCT_CATEGORIES.find(category => raw === category || raw.includes(category)) || '(미분류)'
+}
+
+function getProductSummaryCategory(value: string | null | undefined) {
+  const category = getProductCategory(value)
+  return GUARANTEE_SUMMARY_CATEGORIES.includes(category) ? '보장형' : category
+}
+
+function getExpandedCategoryFilter(categories: Set<string>) {
+  const expanded = new Set(categories)
+  if (expanded.has('보장형')) {
+    GUARANTEE_SUMMARY_CATEGORIES.forEach(category => expanded.add(category))
+  }
+  return [...expanded]
 }
 
 /* ─── 멀티셀렉트 ─── */
@@ -421,7 +435,7 @@ export default function DashboardPage() {
       if (m > 0) q = q.eq('month', m)
       if (week) q = q.eq('week', week)
       if (day) q = q.eq('day', Number(day))
-      if (cats.size > 0) q = q.in('category', [...cats])
+      if (cats.size > 0) q = q.in('category', getExpandedCategoryFilter(cats))
       if (s.trim()) q = q.or(`company.ilike.%${s}%,trade_name.ilike.%${s}%,manager.ilike.%${s}%`)
 
       const { data } = await q
@@ -434,7 +448,7 @@ export default function DashboardPage() {
         let pq = supabase.from('transactions').select('*').eq('year', py).eq('month', pm)
         if (week) pq = pq.eq('week', week)
         if (day) pq = pq.eq('day', Number(day))
-        if (cats.size > 0) pq = pq.in('category', [...cats])
+        if (cats.size > 0) pq = pq.in('category', getExpandedCategoryFilter(cats))
         if (s.trim()) pq = pq.or(`company.ilike.%${s}%,trade_name.ilike.%${s}%,manager.ilike.%${s}%`)
         const { data: prev } = await pq
         setPrevRows(prev || [])
@@ -547,7 +561,7 @@ export default function DashboardPage() {
   const categoryData = useMemo(() => {
     const map = new Map<string, { sales: number; purchase: number; profit: number; count: number }>()
     currentRows.forEach(t => {
-      const k = getProductCategory(t.category)
+      const k = getProductSummaryCategory(t.category)
       const e = map.get(k) || { sales: 0, purchase: 0, profit: 0, count: 0 }
       map.set(k, { sales: e.sales + (t.sales || 0), purchase: e.purchase + (t.purchase || 0), profit: e.profit + (t.profit || 0), count: e.count + 1 })
     })
