@@ -132,11 +132,11 @@ function parseListTab(rows: string[][]): SheetTransaction[] {
   const idx = {
     date:      findColIdx(header, ['날짜', '일자']),
     manager:   findColIdx(header, ['담당자']),
-    company:   findColIdx(header, ['대행사', '업체명']),
-    tradeName: findColIdx(header, ['상호']),
+    company:   findColIdx(header, ['대행사명', '대행사', '업체명']),
+    tradeName: findColIdx(header, ['상호명', '상호']),
     sales:     findColIdx(header, ['매출']),
     purchase:  findColIdx(header, ['매입']),
-    category:  findColIdx(header, ['구분']),
+    category:  findColIdx(header, ['상품 구분', '구분']),
   }
   if (idx.date === -1) return []
 
@@ -166,9 +166,10 @@ function parseIncomeTab(rows: string[][]): SheetTransaction[] {
   const headerIdx = findHeaderIdx(rows, ['계약일자'])
   if (headerIdx === -1) return []
   const header = rows[headerIdx].map(c => c.trim())
+  const categoryIdx = findColIdx(header, ['상품 구분', '구분'])
   const idx = {
     date:      findColIdx(header, ['계약일자']),
-    category:  2,
+    category:  categoryIdx === -1 ? 2 : categoryIdx,
     manager:   findColIdx(header, ['담당자']),
     company:   findColIdx(header, ['대행사명']),
     tradeName: findColIdx(header, ['상호명']),

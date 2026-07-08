@@ -528,7 +528,11 @@ export default function DashboardPage() {
     [buildCompanyData, currentRows]
   )
   const guaranteeManagedRows = useMemo(
-    () => currentRows.filter(t => ['보장형', '관리형'].includes(getProductCategory(t.category))),
+    () => currentRows.filter(t => ['관리형', '보장형', '보장 완료', '중단건'].includes(getProductCategory(t.category))),
+    [currentRows]
+  )
+  const unclassifiedRows = useMemo(
+    () => currentRows.filter(t => getProductCategory(t.category) === '(미분류)'),
     [currentRows]
   )
 
@@ -754,6 +758,9 @@ export default function DashboardPage() {
         .chart-card{margin-bottom:20px}
         .chart-wrap{height:320px;position:relative}
         .table-wrap{overflow-x:auto;max-height:400px;overflow-y:auto}
+        .unclassified-block{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+        .subsection-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--text)}
+        .unclassified-wrap{max-height:220px}
         .detail-wrap{max-height:600px}
         table{width:100%;border-collapse:collapse;font-size:13px}
         thead{position:sticky;top:0;background:var(--header-bg);z-index:2}
@@ -950,6 +957,37 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+              {unclassifiedRows.length > 0 && (
+                <div className="unclassified-block">
+                  <div className="subsection-title">
+                    <span>미분류 거래 목록</span>
+                    <span className="badge">{unclassifiedRows.length}건</span>
+                  </div>
+                  <div className="table-wrap unclassified-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>거래일</th><th>원본 상품 구분</th><th>대행사명</th><th>상호명</th>
+                          <th className="num">매출</th><th className="num">매입</th><th className="num">순익</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unclassifiedRows.map(t => (
+                          <tr key={t.id}>
+                            <td>{t.date}</td>
+                            <td>{t.category || '-'}</td>
+                            <td>{t.company || '-'}</td>
+                            <td>{t.trade_name || '-'}</td>
+                            <td className="num">{fmt(t.sales)}</td>
+                            <td className="num">{fmt(t.purchase)}</td>
+                            <td className={`num ${(t.profit || 0) < 0 ? 'negative' : 'positive'}`}>{fmt(t.profit)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="card chart-card">
               <h3>일자별 손익 추이</h3>
