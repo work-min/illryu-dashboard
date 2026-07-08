@@ -32,6 +32,12 @@ function calcChange(curr: number, prev: number) {
 const WEEK_ORDER = ['1주차', '2주차', '3주차', '4주차', '5주차']
 const PAGE_SIZE = 1000
 const PRODUCT_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장 완료', '중단건', '오세팅건']
+const BULK_UPDATE_FIELDS = [
+  { value: 'category', label: '상품 구분', placeholder: '예: 관리형' },
+  { value: 'company', label: '대행사명', placeholder: '예: 진서애드' },
+  { value: 'trade_name', label: '상호명', placeholder: '예: 김작가' },
+] as const
+type BulkUpdateField = typeof BULK_UPDATE_FIELDS[number]['value']
 
 function getProductCategory(value: string | null | undefined) {
   const raw = String(value || '').trim()
@@ -386,7 +392,8 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [colFilters, setColFilters] = useState<Record<string, string>>({})
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkCat, setBulkCat] = useState('')
+  const [bulkField, setBulkField] = useState<BulkUpdateField>('category')
+  const [bulkValue, setBulkValue] = useState('')
   const [page, setPage] = useState(1)
   const [showModal, setShowModal] = useState(false)
   const [editRow, setEditRow] = useState<Partial<Transaction> | null>(null)  // null = 닫힘, {} = 새 항목, row = 수정
@@ -568,12 +575,14 @@ export default function DashboardPage() {
 
   /* ─ 액션 ─ */
   const handleBulkUpdate = async () => {
-    if (!selectedIds.size || !bulkCat.trim()) return
-    if (!confirm(`${selectedIds.size}건의 상품 구분을 '${bulkCat}'(으)로 변경하시겠습니까?`)) return
-    const { error } = await supabase.from('transactions').update({ category: bulkCat.trim() }).in('id', [...selectedIds])
+    const value = bulkValue.trim()
+    const fieldLabel = BULK_UPDATE_FIELDS.find(f => f.value === bulkField)?.label || '선택 항목'
+    if (!selectedIds.size || !value) return
+    if (!confirm(`${selectedIds.size}건의 ${fieldLabel}을(를) '${value}'(으)로 변경하시겠습니까?`)) return
+    const { error } = await supabase.from('transactions').update({ [bulkField]: value }).in('id', [...selectedIds])
     if (error) { alert('변경 실패: ' + error.message); return }
     await fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch)
-    setSelectedIds(new Set()); setBulkCat('')
+    setSelectedIds(new Set()); setBulkValue('')
   }
 
   // 시트 동기화: 구글 시트 읽어서 DB에 임시 저장 (is_closed=false)
@@ -791,6 +800,8 @@ export default function DashboardPage() {
         .bulk-count{color:var(--primary);font-weight:600;font-size:14px}
         .bulk-count strong{font-size:18px;margin:0 4px}
         .bulk-actions{display:flex;gap:8px;flex-wrap:wrap;flex:1;align-items:center}
+        .bulk-select{padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;height:36px;font-family:inherit;outline:none;min-width:120px}
+        .bulk-select:focus{border-color:var(--primary)}
         .bulk-input{padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;min-width:220px;flex:1;max-width:320px;height:36px;font-family:inherit;outline:none}
         .bulk-input:focus{border-color:var(--primary)}
         .check-col{width:40px;text-align:center!important}
@@ -1051,7 +1062,17 @@ export default function DashboardPage() {
               <div className="bulk-controls">
                 <div><span className="bulk-count">📌<strong>{selectedIds.size}</strong>건 선택됨</span></div>
                 <div className="bulk-actions">
-                  <input className="bulk-input" type="text" value={bulkCat} onChange={e => setBulkCat(e.target.value)} placeholder="새 상품 구분 (예: 보장 완료, 중단건)" onKeyDown={e => e.key === 'Enter' && handleBulkUpdate()} />
+                  <select className="bulk-select" value={bulkField} onChange={e => { setBulkField(e.target.value as BulkUpdateField); setBulkValue('') }}>
+                    {BULK_UPDATE_FIELDS.map(field => <option key={field.value} value={field.value}>{field.label}</option>)}
+                  </select>
+                  <input
+                    className="bulk-input"
+                    type="text"
+                    value={bulkValue}
+                    onChange={e => setBulkValue(e.target.value)}
+                    placeholder={BULK_UPDATE_FIELDS.find(f => f.value === bulkField)?.placeholder || '변경할 값'}
+                    onKeyDown={e => e.key === 'Enter' && handleBulkUpdate()}
+                  />
                   <button className="btn btn-primary btn-sm" onClick={handleBulkUpdate}>✓ 변경 적용</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())}>선택 해제</button>
                 </div>
