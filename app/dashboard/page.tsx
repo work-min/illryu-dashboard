@@ -31,6 +31,13 @@ function calcChange(curr: number, prev: number) {
 
 const WEEK_ORDER = ['1주차', '2주차', '3주차', '4주차', '5주차']
 const PAGE_SIZE = 1000
+const PRODUCT_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장 완료', '중단건', '오세팅건']
+
+function getProductCategory(value: string | null | undefined) {
+  const raw = String(value || '').trim()
+  if (!raw) return '(미분류)'
+  return PRODUCT_CATEGORIES.find(category => raw === category || raw.includes(category)) || '(미분류)'
+}
 
 /* ─── 멀티셀렉트 ─── */
 function MultiSelect({ label, options, selected, onChange }: {
@@ -105,12 +112,13 @@ interface EditModalProps {
 
 function EditModal({ row, categories, onSave, onClose }: EditModalProps) {
   const isNew = !row?.id
+  const initialCategory = getProductCategory(row?.category)
   const [form, setForm] = useState({
     date:       row?.date       || new Date().toISOString().slice(0, 10),
     manager:    row?.manager    || '',
     company:    row?.company    || '',
     trade_name: row?.trade_name || '',
-    category:   row?.category   || '접수형',
+    category:   initialCategory === '(미분류)' ? '접수형' : initialCategory,
     sales:      row?.sales      ?? 0,
     purchase:   row?.purchase   ?? 0,
   })
@@ -162,11 +170,7 @@ function EditModal({ row, categories, onSave, onClose }: EditModalProps) {
             <input type="date" style={fieldStyle} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
           </div>
           <div>
-            <label style={labelStyle}>담당자</label>
-            <input style={fieldStyle} value={form.manager} onChange={e => setForm(f => ({ ...f, manager: e.target.value }))} placeholder="담당자" />
-          </div>
-          <div>
-            <label style={labelStyle}>구분</label>
+            <label style={labelStyle}>상품 구분</label>
             <select style={fieldStyle} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -232,7 +236,7 @@ function PivotTable({ rows }: { rows: Transaction[] }) {
       <table className="company-pivot">
         <thead>
           <tr>
-            <th>업체명</th><th>상호명</th>
+            <th>대행사명</th><th>상호명</th>
             <th className="num">매출</th><th className="num">매입</th><th className="num">순익</th>
             <th className="bar-col">적자 ← 분포 → 흑자</th>
           </tr>
@@ -274,7 +278,7 @@ function PivotTable({ rows }: { rows: Transaction[] }) {
 /* ─── 업체 모달 ─── */
 type CompanyRow = { company: string; sales: number; purchase: number; profit: number; count: number }
 
-function CompanyModal({ data, onClose }: { data: CompanyRow[]; onClose: () => void }) {
+function CompanyModal({ data, title, onClose }: { data: CompanyRow[]; title: string; onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('profit_desc')
   const [view, setView] = useState<'chart' | 'table'>('chart')
@@ -297,16 +301,16 @@ function CompanyModal({ data, onClose }: { data: CompanyRow[]; onClose: () => vo
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>🏢 업체별 순익 전체 ({data.length}개)</h3>
+          <h3>{title} 전체 ({data.length}개)</h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-controls">
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 업체명 검색..." />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 대행사명 검색..." />
           <select value={sort} onChange={e => setSort(e.target.value)}>
             <option value="profit_desc">순익 높은 순</option>
             <option value="profit_asc">순익 낮은 순 (적자 먼저)</option>
             <option value="sales_desc">매출 높은 순</option>
-            <option value="name_asc">업체명 가나다순</option>
+            <option value="name_asc">대행사명 가나다순</option>
             <option value="count_desc">거래 건수 많은 순</option>
           </select>
           <div className="modal-view-toggle">
@@ -336,7 +340,7 @@ function CompanyModal({ data, onClose }: { data: CompanyRow[]; onClose: () => vo
             </div>
           ) : (
             <table id="companyFullTable">
-              <thead><tr><th>순위</th><th>업체명</th><th className="num">건수</th><th className="num">매출</th><th className="num">매입</th><th className="num">순익</th></tr></thead>
+              <thead><tr><th>순위</th><th>대행사명</th><th className="num">건수</th><th className="num">매출</th><th className="num">매입</th><th className="num">순익</th></tr></thead>
               <tbody>
                 {filtered.map((c, i) => (
                   <tr key={c.company}>
@@ -478,7 +482,7 @@ export default function DashboardPage() {
   const availableMonths = Array.from({ length: 12 }, (_, i) => i + 1)
   const weeks = WEEK_ORDER
   const days = Array.from({ length: 31 }, (_, i) => i + 1)
-  const FIXED_CATEGORIES = ['접수형', '관리형', '보장형', '테스트', '보장 완료', '중단건', '오세팅건']
+  const FIXED_CATEGORIES = PRODUCT_CATEGORIES
 
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year
@@ -501,20 +505,30 @@ export default function DashboardPage() {
     return [...map.entries()].sort().map(([date, d]) => ({ date: date.slice(5), ...d }))
   }, [currentRows])
 
-  const companyData = useMemo(() => {
+  const buildCompanyData = useCallback((rows: Transaction[]) => {
     const map = new Map<string, CompanyRow>()
-    currentRows.forEach(t => {
+    rows.forEach(t => {
       const k = t.company || '(미분류)'
       const e = map.get(k) || { company: k, sales: 0, purchase: 0, profit: 0, count: 0 }
       map.set(k, { ...e, sales: e.sales + (t.sales || 0), purchase: e.purchase + (t.purchase || 0), profit: e.profit + (t.profit || 0), count: e.count + 1 })
     })
     return [...map.values()].sort((a, b) => b.profit - a.profit)
-  }, [currentRows])
+  }, [])
+
+  const companyData = useMemo(() => buildCompanyData(currentRows), [buildCompanyData, currentRows])
+  const receptionCompanyData = useMemo(
+    () => buildCompanyData(currentRows.filter(t => getProductCategory(t.category) === '접수형')),
+    [buildCompanyData, currentRows]
+  )
+  const guaranteeManagedRows = useMemo(
+    () => currentRows.filter(t => ['보장형', '관리형'].includes(getProductCategory(t.category))),
+    [currentRows]
+  )
 
   const categoryData = useMemo(() => {
     const map = new Map<string, { sales: number; purchase: number; profit: number; count: number }>()
     currentRows.forEach(t => {
-      const k = t.category || '(미분류)'
+      const k = getProductCategory(t.category)
       const e = map.get(k) || { sales: 0, purchase: 0, profit: 0, count: 0 }
       map.set(k, { sales: e.sales + (t.sales || 0), purchase: e.purchase + (t.purchase || 0), profit: e.profit + (t.profit || 0), count: e.count + 1 })
     })
@@ -555,7 +569,7 @@ export default function DashboardPage() {
   /* ─ 액션 ─ */
   const handleBulkUpdate = async () => {
     if (!selectedIds.size || !bulkCat.trim()) return
-    if (!confirm(`${selectedIds.size}건을 '${bulkCat}'(으)로 변경하시겠습니까?`)) return
+    if (!confirm(`${selectedIds.size}건의 상품 구분을 '${bulkCat}'(으)로 변경하시겠습니까?`)) return
     const { error } = await supabase.from('transactions').update({ category: bulkCat.trim() }).in('id', [...selectedIds])
     if (error) { alert('변경 실패: ' + error.message); return }
     await fetchFilteredData(year, month, filterWeek, filterDay, selCats, debouncedSearch)
@@ -868,7 +882,7 @@ export default function DashboardPage() {
               {days.map(d => <option key={d} value={d}>{d}일</option>)}
             </select>
           </div>
-          <MultiSelect label="구분 (다중 선택)" options={FIXED_CATEGORIES} selected={selCats} onChange={s => { setSelCats(s); setPage(1) }} />
+          <MultiSelect label="상품 구분 (다중 선택)" options={FIXED_CATEGORIES} selected={selCats} onChange={s => { setSelCats(s); setPage(1) }} />
           <div className="filter-item search">
             <label>🔍 검색</label>
             <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="업체명/상호명 (부분 검색)" />
@@ -907,10 +921,10 @@ export default function DashboardPage() {
           {/* 구분별 + 일자별 */}
           <section className="chart-row">
             <div className="card">
-              <h3>구분별 손익 요약</h3>
+              <h3>상품별 손익 요약</h3>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>구분</th><th className="num">건수</th><th className="num">매출</th><th className="num">매입</th><th className="num">순익</th></tr></thead>
+                  <thead><tr><th>상품 구분</th><th className="num">건수</th><th className="num">매출</th><th className="num">매입</th><th className="num">순익</th></tr></thead>
                   <tbody>
                     {categoryData.map(r => (
                       <tr key={r.category}>
@@ -951,19 +965,19 @@ export default function DashboardPage() {
           <section className="chart-row">
             <div className="card chart-card">
               <div className="card-header">
-                <h3>업체별 순익 (상위 15개)</h3>
+                <h3>접수형 순익 (상위 15개)</h3>
                 <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(true)}>📋 전체 보기</button>
               </div>
               <div className="chart-wrap" style={{ height: 460 }}>
-                {companyData.length > 0 ? (
+                {receptionCompanyData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={companyData.slice(0, 15)} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
+                    <BarChart data={receptionCompanyData.slice(0, 15)} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" tickFormatter={v => fmt(Number(v))} tick={{ fontSize: 10 }} />
                       <YAxis type="category" dataKey="company" tick={{ fontSize: 10 }} width={90} />
                       <Tooltip formatter={(v) => fmtKRW(Number(v))} />
                       <Bar dataKey="profit" name="순익" radius={[0, 3, 3, 0]}>
-                        {companyData.slice(0, 15).map((c, i) => <Cell key={i} fill={c.profit >= 0 ? '#7c3aed' : '#dc2626'} />)}
+                        {receptionCompanyData.slice(0, 15).map((c, i) => <Cell key={i} fill={c.profit >= 0 ? '#7c3aed' : '#dc2626'} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -974,7 +988,7 @@ export default function DashboardPage() {
               <h3>적자 업체 TOP 5</h3>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>순위</th><th>업체명</th><th className="num">순익</th></tr></thead>
+                  <thead><tr><th>순위</th><th>대행사명</th><th className="num">순익</th></tr></thead>
                   <tbody>
                     {lossData.map((r, i) => (
                       <tr key={r.company}>
@@ -1012,8 +1026,8 @@ export default function DashboardPage() {
 
           {/* 피벗 테이블 */}
           <section className="card">
-            <h3>업체별 상호명 손익 분포 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>(대행사명 + 상호명 기준)</span></h3>
-            <PivotTable rows={currentRows} />
+            <h3>보장형 · 관리형 손익 분포 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>(대행사명 + 상호명 기준)</span></h3>
+            <PivotTable rows={guaranteeManagedRows} />
           </section>
 
           {/* 상세 거래 리스트 */}
@@ -1037,7 +1051,7 @@ export default function DashboardPage() {
               <div className="bulk-controls">
                 <div><span className="bulk-count">📌<strong>{selectedIds.size}</strong>건 선택됨</span></div>
                 <div className="bulk-actions">
-                  <input className="bulk-input" type="text" value={bulkCat} onChange={e => setBulkCat(e.target.value)} placeholder="새 카테고리 (예: 보장 완료, 중단건)" onKeyDown={e => e.key === 'Enter' && handleBulkUpdate()} />
+                  <input className="bulk-input" type="text" value={bulkCat} onChange={e => setBulkCat(e.target.value)} placeholder="새 상품 구분 (예: 보장 완료, 중단건)" onKeyDown={e => e.key === 'Enter' && handleBulkUpdate()} />
                   <button className="btn btn-primary btn-sm" onClick={handleBulkUpdate}>✓ 변경 적용</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())}>선택 해제</button>
                 </div>
@@ -1053,7 +1067,7 @@ export default function DashboardPage() {
                     </th>
                     {[
                       { key: 'date', label: '일자' }, { key: 'week', label: '주차' },
-                      { key: 'category', label: '구분' }, { key: 'company', label: '업체명' },
+                      { key: 'category', label: '상품 구분' }, { key: 'company', label: '대행사명' },
                       { key: 'trade_name', label: '상호명' }, { key: 'sales', label: '매출', num: true },
                       { key: 'purchase', label: '매입', num: true }, { key: 'profit', label: '순익', num: true },
                     ].map(({ key, label, num }) => (
@@ -1087,7 +1101,7 @@ export default function DashboardPage() {
                       </td>
                       <td>{t.date}</td>
                       <td>{t.week}</td>
-                      <td>{t.category}</td>
+                      <td>{getProductCategory(t.category)}</td>
                       <td>{t.company || '-'}</td>
                       <td>{t.trade_name || '-'}</td>
                       <td className="num">{fmt(t.sales)}</td>
@@ -1122,7 +1136,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {showModal && <CompanyModal data={companyData} onClose={() => setShowModal(false)} />}
+      {showModal && <CompanyModal data={receptionCompanyData} title="접수형 순익" onClose={() => setShowModal(false)} />}
       {editRow !== null && (
         <EditModal
           row={editRow}
