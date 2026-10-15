@@ -64,6 +64,11 @@ function isHeaderText(value: string): boolean {
   ].includes(normalized)
 }
 
+function isTotalLabel(value: string): boolean {
+  const normalized = value.replace(/\s+/g, '').trim()
+  return ['미수금', '미지급금', '미수', '미지급'].includes(normalized)
+}
+
 function parseReceivables(rows: string[][]): { name: string; amount: number }[] {
   const result: { name: string; amount: number }[] = []
 
@@ -72,7 +77,7 @@ function parseReceivables(rows: string[][]): { name: string; amount: number }[] 
     const amount = num(cell(rows, i, 6))
 
     if (!name || amount === 0) continue
-    if (name === '미수금') continue
+    if (isTotalLabel(name)) continue
 
     result.push({ name, amount })
   }
@@ -88,7 +93,7 @@ function parsePayables(rows: string[][]): { name: string; amount: number }[] {
     const amount = num(cell(rows, i, 14))
 
     if (!name || amount === 0) continue
-    if (name === '미지급금') continue
+    if (isTotalLabel(name)) continue
 
     result.push({ name, amount })
   }
