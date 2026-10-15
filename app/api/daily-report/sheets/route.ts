@@ -67,17 +67,15 @@ function isHeaderText(value: string): boolean {
 function parseReceivables(rows: string[][]): { name: string; amount: number }[] {
   const result: { name: string; amount: number }[] = []
 
-  // <미수> : B열 이름 / G열 금액 (3행부터)
   for (let i = 2; i < rows.length; i++) {
     const name = cell(rows, i, 1)
     const amount = num(cell(rows, i, 6))
-    if (name && amount !== 0) result.push({ name, amount })
-  }
 
-  // 총 금액은 G열 1행 (행 인덱스 0, col 6)
-  const totalName = cell(rows, 0, 1)
-  const totalAmount = num(cell(rows, 0, 6))
-  if (totalName && totalAmount !== 0) result.push({ name: totalName, amount: totalAmount })
+    if (!name || amount === 0) continue
+    if (name === '미수금') continue
+
+    result.push({ name, amount })
+  }
 
   return result
 }
@@ -85,17 +83,15 @@ function parseReceivables(rows: string[][]): { name: string; amount: number }[] 
 function parsePayables(rows: string[][]): { name: string; amount: number }[] {
   const result: { name: string; amount: number }[] = []
 
-  // <미지급> : K열 이름 / O열 금액 (3행부터)
   for (let i = 2; i < rows.length; i++) {
     const name = cell(rows, i, 10)
     const amount = num(cell(rows, i, 14))
-    if (name && amount !== 0) result.push({ name, amount })
-  }
 
-  // 총 금액은 O열 1행 (행 인덱스 0, col 14)
-  const totalName = cell(rows, 0, 9)
-  const totalAmount = num(cell(rows, 0, 14))
-  if (totalName && totalAmount !== 0) result.push({ name: totalName, amount: totalAmount })
+    if (!name || amount === 0) continue
+    if (name === '미지급금') continue
+
+    result.push({ name, amount })
+  }
 
   return result
 }
