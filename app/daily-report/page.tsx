@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -116,6 +116,9 @@ const CSS = `
   .nav-tab{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);text-decoration:none;cursor:pointer}
   .nav-tab.active{background:var(--primary);color:white;border-color:var(--primary)}
   .nav-tab:hover:not(.active){background:var(--hover-bg)}
+  .business-switch{display:flex;gap:4px;padding:3px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+  .business-switch button{height:30px;padding:0 12px;border:0;border-radius:5px;background:transparent;color:var(--text-muted);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .business-switch button.active{background:var(--primary);color:#fff}
   .theme-toggle{background:none;border:none;cursor:pointer;font-size:18px;padding:4px}
   .user-badge{display:flex;align-items:center;gap:4px;background:var(--hover-bg);border-radius:8px;padding:4px 8px;font-size:13px;font-weight:600}
   .btn-logout{background:transparent;border:none;cursor:pointer;color:var(--text-muted);font-size:12px;padding:2px 8px;border-left:1px solid var(--border);margin-left:4px}
@@ -172,6 +175,7 @@ export default function DailyReportPage() {
   const [userEmail, setUserEmail] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
 
+  const [business, setBusiness] = useState<'illryu' | 'j2lab'>('illryu')
   const [date, setDate] = useState(todayKST)
   const [transfers, setTransfers] = useState<Transfer[]>([])
   const [receivables, setReceivables] = useState<Item[]>([])
@@ -197,42 +201,58 @@ export default function DailyReportPage() {
     })
   }, [router])
 
-  const loadSaved = useCallback(async (d: string) => {
-    const { data } = await supabase
-      .from('daily_reports')
-      .select('*')
-      .eq('date', d)
-      .maybeSingle()
-    if (data) {
-      setTransfers((data.transfers || []).map((t: Record<string, unknown>) => ({ ...t, id: uid(), amount: String(t.amount ?? '') })))
-      setReceivables(data.receivables || [])
-      setPayables(data.payables || [])
-      setNotes(data.notes || '')
-    } else {
-      setTransfers([]); setReceivables([]); setPayables([]); setNotes('')
-    }
-  }, [])
-
   useEffect(() => {
-    if (!authLoading && date) loadSaved(date)
-  }, [date, authLoading, loadSaved])
+    if (authLoading || !date || business !== 'illryu') return
+    let active = true
+    const loadSaved = async () => {
+      const { data } = await supabase
+        .from('daily_reports')
+        .select('*')
+        .eq('date', date)
+        .maybeSingle()
+      if (!active) return
+      if (data) {
+        setTransfers((data.transfers || []).map((t: Record<string, unknown>) => ({ ...t, id: uid(), amount: String(t.amount ?? '') })))
+        setReceivables(data.receivables || [])
+        setPayables(data.payables || [])
+        setNotes(data.notes || '')
+      } else {
+        setTransfers([]); setReceivables([]); setPayables([]); setNotes('')
+      }
+    }
+    void loadSaved()
+    return () => { active = false }
+  }, [date, authLoading, business])
 
-  async function loadFromSheets() {
+  async function loadFromSheets(target = business) {
     setSheetsLoading(true)
     try {
-      const res = await fetch('/api/daily-report/sheets')
+      const headers: Record<string, string> = {}
+      let endpoint = '/api/daily-report/sheets'
+      if (target === 'j2lab') {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw new Error(error.message)
+        if (!session) {
+          router.push('/login')
+          return
+        }
+        endpoint = '/api/daily-report/j2lab/sheets'
+        headers.Authorization = `Bearer ${session.access_token}`
+      }
+      const res = await fetch(endpoint, { headers })
       const json = await res.json()
-      if (json.error) { alert('시트 오류: ' + json.error); return }
+      if (!res.ok || json.error) throw new Error(json.error || `시트 조회 실패 (${res.status})`)
       setReceivables(json.receivables || [])
       setPayables(json.payables || [])
-    } catch (e) {
-      alert('시트 불러오기 실패: ' + String(e))
+    } catch (error) {
+      alert('시트 불러오기 실패: ' + String(error))
     } finally {
       setSheetsLoading(false)
     }
   }
 
   async function handleSave() {
+    if (business !== 'illryu') return
     setSaving(true); setSaveStatus('')
     const { error } = await supabase
       .from('daily_reports')
@@ -287,6 +307,17 @@ export default function DailyReportPage() {
     setPayables(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: field === 'amount' ? parseAmt(value) : value } : p))
   const removePay = (i: number) => setPayables(prev => prev.filter((_, idx) => idx !== i))
 
+  function switchBusiness(nextBusiness: 'illryu' | 'j2lab') {
+    if (business === nextBusiness || sheetsLoading) return
+    setBusiness(nextBusiness)
+    setTransfers([])
+    setReceivables([])
+    setPayables([])
+    setNotes('')
+    setSaveStatus('')
+    if (nextBusiness === 'j2lab') void loadFromSheets('j2lab')
+  }
+
   if (authLoading) return null
 
   const transferTotal = transfers.reduce((s, t) => s + parseAmt(t.amount), 0)
@@ -318,15 +349,20 @@ export default function DailyReportPage() {
       <main className="main">
 
         <div className="top-bar">
-          <span className="date-label">보고 날짜</span>
+          <div className="business-switch" role="group" aria-label="사업자 선택">
+            <button type="button" disabled={sheetsLoading} className={business === 'illryu' ? 'active' : ''} aria-pressed={business === 'illryu'} onClick={() => switchBusiness('illryu')}>일류기획</button>
+            <button type="button" disabled={sheetsLoading} className={business === 'j2lab' ? 'active' : ''} aria-pressed={business === 'j2lab'} onClick={() => switchBusiness('j2lab')}>제이투랩</button>
+          </div>
+          <span className="date-label">{business === 'illryu' ? '일류기획' : '제이투랩'} 보고 날짜</span>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-          <button className="btn btn-secondary" onClick={loadFromSheets} disabled={sheetsLoading}>
+          <button className="btn btn-secondary" onClick={() => void loadFromSheets()} disabled={sheetsLoading}>
             {sheetsLoading ? '불러오는 중...' : '📊 시트에서 미수/미지급 불러오기'}
           </button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {business === 'illryu' && <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? '저장 중...' : '💾 저장'}
-          </button>
-          {saveStatus && <span className="save-status">✓ {saveStatus}</span>}
+          </button>}
+          {business === 'illryu' && saveStatus && <span className="save-status">✓ {saveStatus}</span>}
+          {business === 'j2lab' && <span className="subtitle">제이투랩 내용은 저장되지 않습니다.</span>}
         </div>
 
         <div className="two-col">
